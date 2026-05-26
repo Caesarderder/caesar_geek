@@ -98,7 +98,7 @@ function WorkspaceConsole() {
             <strong>Caesar Geek</strong>
             <span>local-first fantasy work worlds</span>
           </div>
-          <img className="brandCrest" src="/silver-keep-crest.png" alt="" />
+          <img className="brandCrest" src="/race-sigil.png" alt="" />
         </div>
         <AwesomePanel awesomes={awesomes.data ?? []} refresh={() => void awesomes.refetch()} />
       </aside>
@@ -127,6 +127,8 @@ function WorkspaceConsole() {
           <a href="#claims">Claims</a>
           <a href="#bonds">Bonds</a>
         </nav>
+
+        <ConceptAtlas />
 
         <div className="grid">
           <section className="panel" id="races">
@@ -162,6 +164,49 @@ function PanelTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
       {icon}
       <h2>{title}</h2>
     </div>
+  );
+}
+
+const conceptAssets = [
+  {
+    term: "world",
+    title: "World",
+    copy: "The awesome boundary where state, tasks, logs, and recovery live.",
+    image: "/world-map.png"
+  },
+  {
+    term: "race",
+    title: "Race",
+    copy: "An ultrawork lineage cloned from a local git repository.",
+    image: "/race-sigil.png"
+  },
+  {
+    term: "role",
+    title: "Role",
+    copy: "A geek or agent identity launched to carry out a quest.",
+    image: "/role-operator.png"
+  },
+  {
+    term: "bond",
+    title: "Bond",
+    copy: "The orchestration graph between races and their shared quests.",
+    image: "/bond-network.png"
+  }
+] as const;
+
+function ConceptAtlas() {
+  return (
+    <section className="conceptAtlas" aria-label="World model">
+      {conceptAssets.map((asset) => (
+        <article className="conceptCard" key={asset.term}>
+          <img src={asset.image} alt="" loading="lazy" />
+          <div>
+            <strong>{asset.title}</strong>
+            <span>{asset.copy}</span>
+          </div>
+        </article>
+      ))}
+    </section>
   );
 }
 
@@ -398,34 +443,47 @@ function TakeoverList({ recovery }: { recovery: RecoveryState | undefined }) {
   );
 }
 
-const glossaryTerms = [
+type GlossaryTerm = {
+  term: string;
+  translation: string;
+  concept: string;
+  meaning: string;
+  reason: string;
+  asset?: string;
+};
+
+const glossaryTerms: GlossaryTerm[] = [
   {
     term: "world",
     translation: "世界 / 冒险世界",
     concept: "awesome",
     meaning: "顶层本地工作空间，也是所有任务、日志和运行状态的边界。",
-    reason: "awesome 是整张世界地图，所有种族、角色任务、日志和恢复状态都发生在这个边界内。"
+    reason: "awesome 是整张世界地图，所有种族、角色任务、日志和恢复状态都发生在这个边界内。",
+    asset: "/world-map.png"
   },
   {
     term: "race",
     translation: "种族",
     concept: "ultrawork",
     meaning: "从本地 git 仓库派生出的工作单元，落在 world 的 ultraworks 目录。",
-    reason: "ultrawork 是世界里的种族。每个种族保留自己的 repo 血统、代码边界和当前进度。"
+    reason: "ultrawork 是世界里的种族。每个种族保留自己的 repo 血统、代码边界和当前进度。",
+    asset: "/race-sigil.png"
   },
   {
     term: "role",
     translation: "角色",
     concept: "geek / agent role",
     meaning: "由某个种族启动的 agent 执行身份，可以偏侦察、构建、修复、审查或批量推进。",
-    reason: "同一个种族可以启动不同角色；角色描述执行风格，底层仍由 geek task/runtime 承载。"
+    reason: "同一个种族可以启动不同角色；角色描述执行风格，底层仍由 geek task/runtime 承载。",
+    asset: "/role-operator.png"
   },
   {
     term: "bond",
     translation: "羁绊 / 编排",
     concept: "orchestration",
     meaning: "多个种族之间的协作关系，以及任务如何跨 ultrawork 组合、追踪和恢复。",
-    reason: "羁绊表达种族之间的编排关系，比旧的队伍/封地比喻更贴近多 agent 协作。"
+    reason: "羁绊表达种族之间的编排关系，比旧的队伍/封地比喻更贴近多 agent 协作。",
+    asset: "/bond-network.png"
   },
   {
     term: "quest",
@@ -461,8 +519,8 @@ const glossaryTerms = [
     concept: "user goal",
     meaning: "用户真正想救出来的结果，比如完成修复、跑通任务或恢复状态。",
     reason: "它提醒界面和 agent 不要沉迷支线，要围绕最终目标推进。"
-  },
-] as const;
+  }
+];
 
 const usageNotes = [
   "先创建或选择 world，它就是这局冒险的地图边界，浏览器的本地操作都会经 gateway 执行。",
@@ -513,6 +571,7 @@ function CodexModal({ onClose }: { onClose: () => void }) {
               <div className="codexTerms">
                 {glossaryTerms.map((entry) => (
                   <div className="codexTerm" key={entry.term}>
+                    {entry.asset ? <img className="codexTermAsset" src={entry.asset} alt="" loading="lazy" /> : null}
                     <div className="codexTermHead">
                       <strong>{entry.term}</strong>
                       <span>{entry.translation}</span>
