@@ -1,0 +1,36 @@
+{
+  "name": "caesar-geek",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.22.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @caesar-geek/server --filter @caesar-geek/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @caesar-geek/server db:generate",
+    "db:migrate": "pnpm --filter @caesar-geek/server db:migrate"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4",
+    "vitest": "^4.0.14"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@tanstack/react-query": "^5.90.11",
+    "@tanstack/react-router": "^1.139.9",
+    "@trpc/client": "^11.7.2",
+    "@trpc/server": "^11.7.2",
+    "drizzle-orm": "^0.45.0",
+    "fastify": "^5.6.2",
+    "lucide-react": "^0.555.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.1.13"
+  }
+}
