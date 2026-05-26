@@ -1,6 +1,20 @@
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
-import { Activity, FolderGit2, GitBranchPlus, Hammer, Octagon, Pause, Play, RefreshCcw, ShieldAlert, SquarePlus, UserCheck } from "lucide-react";
+import {
+  Activity,
+  BookOpen,
+  FolderGit2,
+  GitBranchPlus,
+  Hammer,
+  Octagon,
+  Pause,
+  Play,
+  RefreshCcw,
+  ShieldAlert,
+  SquarePlus,
+  UserCheck,
+  X
+} from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { GeekTask, RegistryRecord, TaskEvent, Ultrawork } from "@caesar-geek/shared";
@@ -53,6 +67,7 @@ function App() {
 function WorkspaceConsole() {
   const qc = useQueryClient();
   const [eventLog, setEventLog] = useState<TaskEvent[]>([]);
+  const [isCodexOpen, setIsCodexOpen] = useState(false);
   const awesomes = useQuery({ queryKey: ["awesomes"], queryFn: () => trpc.awesomes.list.query() });
   const recovery = useQuery({
     queryKey: ["recovery"],
@@ -76,10 +91,12 @@ function WorkspaceConsole() {
     <main className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <img className="brandIcon" src="/caesar-geek-icon.png" alt="" />
+          <button className="brandAvatar" type="button" aria-label="Open Caesar Geek codex" onClick={() => setIsCodexOpen(true)}>
+            <img className="brandIcon" src="/caesar-geek-icon.png" alt="" />
+          </button>
           <div>
             <strong>Caesar Geek</strong>
-            <span>western medieval dev keep</span>
+            <span>local-first fantasy work worlds</span>
           </div>
           <img className="brandCrest" src="/silver-keep-crest.png" alt="" />
         </div>
@@ -89,27 +106,27 @@ function WorkspaceConsole() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <span className="eyebrow">crown realm</span>
-            <h1>{recovery.data?.awesome.name ?? "No realm selected"}</h1>
+            <span className="eyebrow">active world</span>
+            <h1>{recovery.data?.awesome.name ?? "No world selected"}</h1>
           </div>
           <div className="topMeta" aria-label="Workspace status">
-            <span>{recovery.data?.ultraworks.length ?? 0} fiefs</span>
+            <span>{recovery.data?.ultraworks.length ?? 0} races</span>
             <span>{recovery.data?.tasks.length ?? 0} quests</span>
-            <span>{events.length} dispatches</span>
+            <span>{events.length} bonds</span>
           </div>
           <button className="iconText" onClick={() => void recovery.refetch()}>
             <RefreshCcw size={16} />
-            Scout
+            Scan
           </button>
         </header>
 
         <div className="grid">
           <section className="panel">
-            <PanelTitle icon={<FolderGit2 size={17} />} title="Fief Registry" />
+            <PanelTitle icon={<FolderGit2 size={17} />} title="Race Registry" />
             <UltraworkPanel ultraworks={recovery.data?.ultraworks ?? []} />
           </section>
           <section className="panel">
-            <PanelTitle icon={<SquarePlus size={17} />} title="Draft Royal Writ" />
+            <PanelTitle icon={<SquarePlus size={17} />} title="Draft Role Quest" />
             <TaskCreator ultraworks={recovery.data?.ultraworks ?? []} />
           </section>
           <section className="panel wide">
@@ -117,15 +134,16 @@ function WorkspaceConsole() {
             <TaskTable recovery={recovery.data} />
           </section>
           <section className="panel wide">
-            <PanelTitle icon={<UserCheck size={17} />} title="Steward Claims" />
+            <PanelTitle icon={<UserCheck size={17} />} title="Role Claims" />
             <TakeoverList recovery={recovery.data} />
           </section>
           <section className="panel wide">
-            <PanelTitle icon={<Activity size={17} />} title="Herald Dispatches" />
+            <PanelTitle icon={<Activity size={17} />} title="Bond Stream" />
             <EventStream events={events} />
           </section>
         </div>
       </section>
+      {isCodexOpen ? <CodexModal onClose={() => setIsCodexOpen(false)} /> : null}
     </main>
   );
 }
@@ -141,7 +159,7 @@ function PanelTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
 
 function AwesomePanel({ awesomes, refresh }: { awesomes: RegistryRecord[]; refresh: () => void }) {
   const qc = useQueryClient();
-  const [name, setName] = useState("Local Realm");
+  const [name, setName] = useState("Local World");
   const [rootPath, setRootPath] = useState("");
   const create = useMutation({
     mutationFn: () => trpc.awesomes.create.mutate({ name, path: rootPath }),
@@ -161,20 +179,20 @@ function AwesomePanel({ awesomes, refresh }: { awesomes: RegistryRecord[]; refre
   return (
     <div className="stack">
       <label>
-        <span>Realm Name</span>
+        <span>World Name</span>
         <input value={name} onChange={(event) => setName(event.target.value)} />
       </label>
       <label>
-        <span>Keep Path</span>
-        <input value={rootPath} onChange={(event) => setRootPath(event.target.value)} placeholder="/Users/me/realm" />
+        <span>World Path</span>
+        <input value={rootPath} onChange={(event) => setRootPath(event.target.value)} placeholder="/Users/me/world" />
       </label>
       <button className="primary" disabled={!rootPath || create.isPending} onClick={() => create.mutate()}>
         <SquarePlus size={16} />
-        Found Realm
+        Found World
       </button>
       <div className="sideHeader">
-        <span>Known Realms</span>
-        <button className="iconOnly" aria-label="Scout known realms" onClick={refresh}>
+        <span>Known Worlds</span>
+        <button className="iconOnly" aria-label="Scan known worlds" onClick={refresh}>
           <RefreshCcw size={15} />
         </button>
       </div>
@@ -182,7 +200,7 @@ function AwesomePanel({ awesomes, refresh }: { awesomes: RegistryRecord[]; refre
         {awesomes.map((awesome) => (
           <button key={awesome.id} className="awesomeRow" onClick={() => select.mutate(awesome.id)} disabled={awesome.availability !== "available"}>
             <span>{awesome.name}</span>
-            <small data-state={awesome.availability}>{realmGateLabel(awesome.availability)}</small>
+            <small data-state={awesome.availability}>{worldGateLabel(awesome.availability)}</small>
           </button>
         ))}
       </div>
@@ -206,7 +224,7 @@ function UltraworkPanel({ ultraworks }: { ultraworks: Ultrawork[] }) {
         <input value={sourcePath} onChange={(event) => setSourcePath(event.target.value)} placeholder="/path/to/local/git/repo" />
         <button className="iconText" disabled={!sourcePath || add.isPending} onClick={() => add.mutate()}>
           <FolderGit2 size={16} />
-          Grant Fief
+          Add Race
         </button>
       </div>
       <div className="rows">
@@ -224,8 +242,8 @@ function UltraworkPanel({ ultraworks }: { ultraworks: Ultrawork[] }) {
 
 function TaskCreator({ ultraworks }: { ultraworks: Ultrawork[] }) {
   const qc = useQueryClient();
-  const [title, setTitle] = useState("Scout the Keep");
-  const [prompt, setPrompt] = useState("Run a keep command");
+  const [title, setTitle] = useState("Scan the World");
+  const [prompt, setPrompt] = useState("Run a world command");
   const [command, setCommand] = useState(`${JSON.stringify(processStubCommand())}`);
   const [selected, setSelected] = useState<string[]>([]);
   const create = useMutation({
@@ -244,15 +262,15 @@ function TaskCreator({ ultraworks }: { ultraworks: Ultrawork[] }) {
   return (
     <div className="stack">
       <label>
-        <span>Writ Title</span>
+        <span>Quest Title</span>
         <input value={title} onChange={(event) => setTitle(event.target.value)} />
       </label>
       <label>
-        <span>Charge</span>
+        <span>Role Brief</span>
         <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} />
       </label>
       <label>
-        <span>Decree JSON</span>
+        <span>Command JSON</span>
         <input value={command} onChange={(event) => setCommand(event.target.value)} />
       </label>
       <div className="checks">
@@ -271,7 +289,7 @@ function TaskCreator({ ultraworks }: { ultraworks: Ultrawork[] }) {
       </div>
       <button className="primary" disabled={create.isPending} onClick={() => create.mutate()}>
         <Play size={16} />
-        Dispatch
+        Launch Role
       </button>
       {create.data && !create.data.policy.allowed ? (
         <p className="policy">
@@ -291,7 +309,7 @@ function TaskTable({ recovery }: { recovery: RecoveryState | undefined }) {
       trpc.tasks.followUp.mutate({
         taskId: task.id,
         claimedBy: "operator",
-        prompt: `Continue the writ from: ${task.prompt}`,
+        prompt: `Continue the quest from: ${task.prompt}`,
         command: task.command,
         launch: false
       }),
@@ -306,7 +324,7 @@ function TaskTable({ recovery }: { recovery: RecoveryState | undefined }) {
         <span>Charge</span>
         <span>Decree</span>
         <span>State</span>
-        <span>Fiefs</span>
+        <span>Races</span>
         <span>Actions</span>
       </div>
       {(recovery?.tasks ?? []).map((task) => {
@@ -331,7 +349,7 @@ function TaskTable({ recovery }: { recovery: RecoveryState | undefined }) {
               <button className="iconOnly" aria-label="End quest" onClick={() => terminate.mutate(task.id)}>
                 <Octagon size={15} />
               </button>
-              <button className="iconOnly" aria-label="Draft follow-up writ" onClick={() => followUp.mutate(task)}>
+              <button className="iconOnly" aria-label="Draft follow-up quest" onClick={() => followUp.mutate(task)}>
                 <GitBranchPlus size={15} />
               </button>
             </div>
@@ -372,15 +390,160 @@ function TakeoverList({ recovery }: { recovery: RecoveryState | undefined }) {
   );
 }
 
+const glossaryTerms = [
+  {
+    term: "world",
+    translation: "世界 / 冒险世界",
+    concept: "awesome",
+    meaning: "顶层本地工作空间，也是所有任务、日志和运行状态的边界。",
+    reason: "awesome 是整张世界地图，所有种族、角色任务、日志和恢复状态都发生在这个边界内。"
+  },
+  {
+    term: "race",
+    translation: "种族",
+    concept: "ultrawork",
+    meaning: "从本地 git 仓库派生出的工作单元，落在 world 的 ultraworks 目录。",
+    reason: "ultrawork 是世界里的种族。每个种族保留自己的 repo 血统、代码边界和当前进度。"
+  },
+  {
+    term: "role",
+    translation: "角色",
+    concept: "geek / agent role",
+    meaning: "由某个种族启动的 agent 执行身份，可以偏侦察、构建、修复、审查或批量推进。",
+    reason: "同一个种族可以启动不同角色；角色描述执行风格，底层仍由 geek task/runtime 承载。"
+  },
+  {
+    term: "bond",
+    translation: "羁绊 / 编排",
+    concept: "orchestration",
+    meaning: "多个种族之间的协作关系，以及任务如何跨 ultrawork 组合、追踪和恢复。",
+    reason: "羁绊表达种族之间的编排关系，比旧的队伍/封地比喻更贴近多 agent 协作。"
+  },
+  {
+    term: "quest",
+    translation: "任务 / 远征",
+    concept: "geek task",
+    meaning: "一次角色执行任务，先持久化，再由 runtime 启动或恢复状态。",
+    reason: "角色接到目标后出发，过程可能进行中、暂停、失败，也可能完成后写入战报。"
+  },
+  {
+    term: "scroll",
+    translation: "魔法卷轴 / 任务卷轴",
+    concept: "task draft",
+    meaning: "承载标题、指令正文、命令 JSON 和关联 race bond 的任务指令。",
+    reason: "命令像被写进卷轴的咒语，派发后会召唤一次可记录、可恢复的 quest。"
+  },
+  {
+    term: "battle log",
+    translation: "战报 / 冒险日志",
+    concept: "task event",
+    meaning: "任务事件流，来自 SSE 和 SQLite 中保存的历史记录。",
+    reason: "runtime 把角色执行时的输出、错误、状态变化传回界面，像战斗日志。"
+  },
+  {
+    term: "guild master",
+    translation: "公会会长 / 操作者",
+    concept: "takeover",
+    meaning: "操作者对任务的认领、暂停、终止或追加后续任务。",
+    reason: "操作者像公会会长，可以接管角色任务，决定继续、暂停或终止。"
+  },
+  {
+    term: "princess",
+    translation: "公主 / 核心目标",
+    concept: "user goal",
+    meaning: "用户真正想救出来的结果，比如完成修复、跑通任务或恢复状态。",
+    reason: "它提醒界面和 agent 不要沉迷支线，要围绕最终目标推进。"
+  },
+] as const;
+
+const usageNotes = [
+  "先创建或选择 world，它就是这局冒险的地图边界，浏览器的本地操作都会经 gateway 执行。",
+  "把本地 git repo 加入 world 时，可以把它理解为加入一个 race；当前策略是 clone，而不是复制普通目录。",
+  "每个 race 可以启动不同 role；选择多个 race 时形成 bond，也就是一次任务的编排范围。",
+  "派发 scroll 会创建 quest；命令必须写成 JSON 数组，例如 [\"node\", \"-e\", \"console.log(process.cwd())\"]。"
+] as const;
+
+function CodexModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="codexOverlay" role="presentation" onMouseDown={onClose}>
+      <section className="codexModal" role="dialog" aria-modal="true" aria-labelledby="codex-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="codexHeader">
+          <div>
+            <span className="eyebrow">adventurer codex</span>
+            <h2 id="codex-title">Caesar Geek Bestiary</h2>
+          </div>
+          <button className="iconOnly" type="button" aria-label="Close codex" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </header>
+
+        <div className="codexBody">
+          <figure className="codexPortrait">
+            <img src="/caesar-geek-icon.png" alt="Caesar Geek avatar" />
+            <figcaption>
+              <strong>Caesar Geek</strong>
+              <span>local-first adventure console for AI work across repositories</span>
+            </figcaption>
+          </figure>
+
+          <div className="codexPages">
+            <section className="codexSection">
+              <div className="panelTitle">
+                <BookOpen size={17} />
+                <h3>Terms</h3>
+              </div>
+              <div className="codexTerms">
+                {glossaryTerms.map((entry) => (
+                  <div className="codexTerm" key={entry.term}>
+                    <div className="codexTermHead">
+                      <strong>{entry.term}</strong>
+                      <span>{entry.translation}</span>
+                    </div>
+                    <span>{entry.concept}</span>
+                    <p>{entry.meaning}</p>
+                    <p className="codexReason">{entry.reason}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="codexSection">
+              <div className="panelTitle">
+                <ShieldAlert size={17} />
+                <h3>How It Works</h3>
+              </div>
+              <ol className="codexNotes">
+                {usageNotes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ol>
+            </section>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function processStubCommand(): string[] {
   return ["node", "-e", "console.log(process.cwd())"];
 }
 
-function realmGateLabel(state: string): string {
+function worldGateLabel(state: string): string {
   const labels: Record<string, string> = {
-    available: "open gate",
-    missing: "lost gate",
-    corrupt: "broken gate"
+    available: "open world",
+    missing: "lost world",
+    corrupt: "broken world"
   };
   return labels[state] ?? state;
 }
@@ -403,10 +566,10 @@ function questStateLabel(state: string): string {
 
 function dispatchTypeLabel(type: string): string {
   const labels: Record<string, string> = {
-    status: "herald",
-    log: "scribe",
+    status: "bond",
+    log: "trace",
     error: "alarm",
-    policy: "edict",
+    policy: "guard",
     takeover: "claim"
   };
   return labels[type] ?? type;
@@ -417,7 +580,7 @@ function claimActionLabel(action: string): string {
     claim: "claimed",
     interrupt: "halted",
     terminate: "ended",
-    follow_up: "new writ"
+    follow_up: "new quest"
   };
   return labels[action] ?? action;
 }

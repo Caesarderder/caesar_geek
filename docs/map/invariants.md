@@ -26,6 +26,7 @@ related:
 ## 产品不变量
 
 - `awesome`、`ultrawork`、`geek` 是公开领域词，不能随意改名。
+- 世界观映射必须保持：`awesome` 是 world，`ultrawork` 是 race，`geek`/agent 是由 race 启动的 role，race 之间的协作编排称为 bond。
 - 第一版本是本地单用户，不包含认证、远程部署、多用户权限组或项目管理套件。
 - `geek` 任务应从所选 `awesome` 目录启动，而不是原始 repo 或单个 ultrawork 目录。
 - `ultrawork` 必须保持 git 关系；普通目录复制或 symlink 不满足当前规格。
