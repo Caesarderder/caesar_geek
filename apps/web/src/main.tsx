@@ -114,30 +114,38 @@ function WorkspaceConsole() {
             <span>{recovery.data?.tasks.length ?? 0} quests</span>
             <span>{events.length} bonds</span>
           </div>
-          <button className="iconText" onClick={() => void recovery.refetch()}>
+          <button className="iconText scanButton" onClick={() => void recovery.refetch()} aria-label="Scan active world">
             <RefreshCcw size={16} />
             Scan
           </button>
         </header>
 
+        <nav className="quickNav" aria-label="Console sections">
+          <a href="#races">Races</a>
+          <a href="#scroll">Scroll</a>
+          <a href="#quests">Quests</a>
+          <a href="#claims">Claims</a>
+          <a href="#bonds">Bonds</a>
+        </nav>
+
         <div className="grid">
-          <section className="panel">
+          <section className="panel" id="races">
             <PanelTitle icon={<FolderGit2 size={17} />} title="Race Registry" />
             <UltraworkPanel ultraworks={recovery.data?.ultraworks ?? []} />
           </section>
-          <section className="panel">
+          <section className="panel" id="scroll">
             <PanelTitle icon={<SquarePlus size={17} />} title="Draft Role Quest" />
             <TaskCreator ultraworks={recovery.data?.ultraworks ?? []} />
           </section>
-          <section className="panel wide">
+          <section className="panel wide" id="quests">
             <PanelTitle icon={<Hammer size={17} />} title="Quest Ledger" />
             <TaskTable recovery={recovery.data} />
           </section>
-          <section className="panel wide">
+          <section className="panel wide" id="claims">
             <PanelTitle icon={<UserCheck size={17} />} title="Role Claims" />
             <TakeoverList recovery={recovery.data} />
           </section>
-          <section className="panel wide">
+          <section className="panel wide" id="bonds">
             <PanelTitle icon={<Activity size={17} />} title="Bond Stream" />
             <EventStream events={events} />
           </section>
@@ -331,15 +339,15 @@ function TaskTable({ recovery }: { recovery: RecoveryState | undefined }) {
         const linked = recovery?.taskUltraworks.filter((link) => link.taskId === task.id).length ?? 0;
         return (
           <div className="taskRow" key={task.id}>
-            <div>
+            <div data-label="Quest">
               <strong>{task.title}</strong>
               <small>{task.cwd}</small>
             </div>
-            <code>{task.prompt}</code>
-            <code>{task.command.join(" ")}</code>
-            <span className="status">{questStateLabel(task.status)}</span>
-            <span>{linked}</span>
-            <div className="actions">
+            <code data-label="Charge">{task.prompt}</code>
+            <code data-label="Decree">{task.command.join(" ")}</code>
+            <span className="status" data-label="State">{questStateLabel(task.status)}</span>
+            <span data-label="Races">{linked}</span>
+            <div className="actions" data-label="Actions">
               <button className="iconOnly" aria-label="Claim quest" onClick={() => claim.mutate(task.id)}>
                 <UserCheck size={15} />
               </button>
@@ -379,11 +387,11 @@ function TakeoverList({ recovery }: { recovery: RecoveryState | undefined }) {
     <div className="takeovers">
       {(recovery?.takeoverEvents ?? []).map((event) => (
         <div className="takeover" key={event.id}>
-          <strong>{claimActionLabel(event.action)}</strong>
-          <span>{event.claimedBy}</span>
-          <span>{taskNames.get(event.taskId) ?? event.taskId}</span>
-          <time>{new Date(event.createdAt).toLocaleString()}</time>
-          <code>{event.note ?? ""}</code>
+          <strong data-label="Action">{claimActionLabel(event.action)}</strong>
+          <span data-label="Claimed by">{event.claimedBy}</span>
+          <span data-label="Quest">{taskNames.get(event.taskId) ?? event.taskId}</span>
+          <time data-label="When">{new Date(event.createdAt).toLocaleString()}</time>
+          <code data-label="Note">{event.note ?? ""}</code>
         </div>
       ))}
     </div>
