@@ -76,11 +76,12 @@ function WorkspaceConsole() {
     <main className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <Activity size={20} />
+          <img className="brandIcon" src="/caesar-geek-icon.png" alt="" />
           <div>
             <strong>Caesar Geek</strong>
-            <span>local gateway</span>
+            <span>western medieval dev keep</span>
           </div>
+          <img className="brandCrest" src="/silver-keep-crest.png" alt="" />
         </div>
         <AwesomePanel awesomes={awesomes.data ?? []} refresh={() => void awesomes.refetch()} />
       </aside>
@@ -88,34 +89,39 @@ function WorkspaceConsole() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <span className="eyebrow">awesome</span>
-            <h1>{recovery.data?.awesome.name ?? "No awesome selected"}</h1>
+            <span className="eyebrow">crown realm</span>
+            <h1>{recovery.data?.awesome.name ?? "No realm selected"}</h1>
+          </div>
+          <div className="topMeta" aria-label="Workspace status">
+            <span>{recovery.data?.ultraworks.length ?? 0} fiefs</span>
+            <span>{recovery.data?.tasks.length ?? 0} quests</span>
+            <span>{events.length} dispatches</span>
           </div>
           <button className="iconText" onClick={() => void recovery.refetch()}>
             <RefreshCcw size={16} />
-            Refresh
+            Scout
           </button>
         </header>
 
         <div className="grid">
           <section className="panel">
-            <PanelTitle icon={<FolderGit2 size={17} />} title="Ultraworks" />
+            <PanelTitle icon={<FolderGit2 size={17} />} title="Fief Registry" />
             <UltraworkPanel ultraworks={recovery.data?.ultraworks ?? []} />
           </section>
           <section className="panel">
-            <PanelTitle icon={<SquarePlus size={17} />} title="Create Geek Task" />
+            <PanelTitle icon={<SquarePlus size={17} />} title="Draft Royal Writ" />
             <TaskCreator ultraworks={recovery.data?.ultraworks ?? []} />
           </section>
           <section className="panel wide">
-            <PanelTitle icon={<Hammer size={17} />} title="Geek Tasks" />
+            <PanelTitle icon={<Hammer size={17} />} title="Quest Ledger" />
             <TaskTable recovery={recovery.data} />
           </section>
           <section className="panel wide">
-            <PanelTitle icon={<UserCheck size={17} />} title="Takeovers" />
+            <PanelTitle icon={<UserCheck size={17} />} title="Steward Claims" />
             <TakeoverList recovery={recovery.data} />
           </section>
           <section className="panel wide">
-            <PanelTitle icon={<Activity size={17} />} title="Events" />
+            <PanelTitle icon={<Activity size={17} />} title="Herald Dispatches" />
             <EventStream events={events} />
           </section>
         </div>
@@ -135,7 +141,7 @@ function PanelTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
 
 function AwesomePanel({ awesomes, refresh }: { awesomes: RegistryRecord[]; refresh: () => void }) {
   const qc = useQueryClient();
-  const [name, setName] = useState("Local Awesome");
+  const [name, setName] = useState("Local Realm");
   const [rootPath, setRootPath] = useState("");
   const create = useMutation({
     mutationFn: () => trpc.awesomes.create.mutate({ name, path: rootPath }),
@@ -155,20 +161,20 @@ function AwesomePanel({ awesomes, refresh }: { awesomes: RegistryRecord[]; refre
   return (
     <div className="stack">
       <label>
-        <span>Name</span>
+        <span>Realm Name</span>
         <input value={name} onChange={(event) => setName(event.target.value)} />
       </label>
       <label>
-        <span>Path</span>
-        <input value={rootPath} onChange={(event) => setRootPath(event.target.value)} placeholder="/Users/me/awesome" />
+        <span>Keep Path</span>
+        <input value={rootPath} onChange={(event) => setRootPath(event.target.value)} placeholder="/Users/me/realm" />
       </label>
       <button className="primary" disabled={!rootPath || create.isPending} onClick={() => create.mutate()}>
         <SquarePlus size={16} />
-        Create
+        Found Realm
       </button>
       <div className="sideHeader">
-        <span>Known</span>
-        <button className="iconOnly" aria-label="Refresh awesomes" onClick={refresh}>
+        <span>Known Realms</span>
+        <button className="iconOnly" aria-label="Scout known realms" onClick={refresh}>
           <RefreshCcw size={15} />
         </button>
       </div>
@@ -176,7 +182,7 @@ function AwesomePanel({ awesomes, refresh }: { awesomes: RegistryRecord[]; refre
         {awesomes.map((awesome) => (
           <button key={awesome.id} className="awesomeRow" onClick={() => select.mutate(awesome.id)} disabled={awesome.availability !== "available"}>
             <span>{awesome.name}</span>
-            <small data-state={awesome.availability}>{awesome.availability}</small>
+            <small data-state={awesome.availability}>{realmGateLabel(awesome.availability)}</small>
           </button>
         ))}
       </div>
@@ -200,7 +206,7 @@ function UltraworkPanel({ ultraworks }: { ultraworks: Ultrawork[] }) {
         <input value={sourcePath} onChange={(event) => setSourcePath(event.target.value)} placeholder="/path/to/local/git/repo" />
         <button className="iconText" disabled={!sourcePath || add.isPending} onClick={() => add.mutate()}>
           <FolderGit2 size={16} />
-          Add
+          Grant Fief
         </button>
       </div>
       <div className="rows">
@@ -208,7 +214,7 @@ function UltraworkPanel({ ultraworks }: { ultraworks: Ultrawork[] }) {
           <div className="row" key={ultrawork.id}>
             <strong>{ultrawork.name}</strong>
             <span>{ultrawork.destinationPath}</span>
-            <small>{ultrawork.headSha?.slice(0, 10) ?? "no head"}</small>
+            <small>{ultrawork.headSha?.slice(0, 10) ?? "unsealed"}</small>
           </div>
         ))}
       </div>
@@ -218,8 +224,8 @@ function UltraworkPanel({ ultraworks }: { ultraworks: Ultrawork[] }) {
 
 function TaskCreator({ ultraworks }: { ultraworks: Ultrawork[] }) {
   const qc = useQueryClient();
-  const [title, setTitle] = useState("Stub Codex task");
-  const [prompt, setPrompt] = useState("Run a local command");
+  const [title, setTitle] = useState("Scout the Keep");
+  const [prompt, setPrompt] = useState("Run a keep command");
   const [command, setCommand] = useState(`${JSON.stringify(processStubCommand())}`);
   const [selected, setSelected] = useState<string[]>([]);
   const create = useMutation({
@@ -238,15 +244,15 @@ function TaskCreator({ ultraworks }: { ultraworks: Ultrawork[] }) {
   return (
     <div className="stack">
       <label>
-        <span>Title</span>
+        <span>Writ Title</span>
         <input value={title} onChange={(event) => setTitle(event.target.value)} />
       </label>
       <label>
-        <span>Prompt</span>
+        <span>Charge</span>
         <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} />
       </label>
       <label>
-        <span>Command JSON</span>
+        <span>Decree JSON</span>
         <input value={command} onChange={(event) => setCommand(event.target.value)} />
       </label>
       <div className="checks">
@@ -265,7 +271,7 @@ function TaskCreator({ ultraworks }: { ultraworks: Ultrawork[] }) {
       </div>
       <button className="primary" disabled={create.isPending} onClick={() => create.mutate()}>
         <Play size={16} />
-        Launch
+        Dispatch
       </button>
       {create.data && !create.data.policy.allowed ? (
         <p className="policy">
@@ -285,7 +291,7 @@ function TaskTable({ recovery }: { recovery: RecoveryState | undefined }) {
       trpc.tasks.followUp.mutate({
         taskId: task.id,
         claimedBy: "operator",
-        prompt: `Continue from: ${task.prompt}`,
+        prompt: `Continue the writ from: ${task.prompt}`,
         command: task.command,
         launch: false
       }),
@@ -296,12 +302,12 @@ function TaskTable({ recovery }: { recovery: RecoveryState | undefined }) {
   return (
     <div className="taskTable">
       <div className="taskHead">
-        <span>Task</span>
-        <span>Prompt</span>
-        <span>Command</span>
-        <span>Status</span>
-        <span>Ultraworks</span>
-        <span>Controls</span>
+        <span>Quest</span>
+        <span>Charge</span>
+        <span>Decree</span>
+        <span>State</span>
+        <span>Fiefs</span>
+        <span>Actions</span>
       </div>
       {(recovery?.tasks ?? []).map((task) => {
         const linked = recovery?.taskUltraworks.filter((link) => link.taskId === task.id).length ?? 0;
@@ -313,19 +319,19 @@ function TaskTable({ recovery }: { recovery: RecoveryState | undefined }) {
             </div>
             <code>{task.prompt}</code>
             <code>{task.command.join(" ")}</code>
-            <span className="status">{task.status}</span>
+            <span className="status">{questStateLabel(task.status)}</span>
             <span>{linked}</span>
             <div className="actions">
-              <button className="iconOnly" aria-label="Claim task" onClick={() => claim.mutate(task.id)}>
+              <button className="iconOnly" aria-label="Claim quest" onClick={() => claim.mutate(task.id)}>
                 <UserCheck size={15} />
               </button>
-              <button className="iconOnly" aria-label="Interrupt task" onClick={() => interrupt.mutate(task.id)}>
+              <button className="iconOnly" aria-label="Halt quest" onClick={() => interrupt.mutate(task.id)}>
                 <Pause size={15} />
               </button>
-              <button className="iconOnly" aria-label="Terminate task" onClick={() => terminate.mutate(task.id)}>
+              <button className="iconOnly" aria-label="End quest" onClick={() => terminate.mutate(task.id)}>
                 <Octagon size={15} />
               </button>
-              <button className="iconOnly" aria-label="Create follow-up task" onClick={() => followUp.mutate(task)}>
+              <button className="iconOnly" aria-label="Draft follow-up writ" onClick={() => followUp.mutate(task)}>
                 <GitBranchPlus size={15} />
               </button>
             </div>
@@ -341,7 +347,7 @@ function EventStream({ events }: { events: TaskEvent[] }) {
     <div className="events">
       {events.map((event) => (
         <div className="event" key={event.id}>
-          <span>{event.type}</span>
+          <span>{dispatchTypeLabel(event.type)}</span>
           <code>{event.message.trim()}</code>
         </div>
       ))}
@@ -355,7 +361,7 @@ function TakeoverList({ recovery }: { recovery: RecoveryState | undefined }) {
     <div className="takeovers">
       {(recovery?.takeoverEvents ?? []).map((event) => (
         <div className="takeover" key={event.id}>
-          <strong>{event.action}</strong>
+          <strong>{claimActionLabel(event.action)}</strong>
           <span>{event.claimedBy}</span>
           <span>{taskNames.get(event.taskId) ?? event.taskId}</span>
           <time>{new Date(event.createdAt).toLocaleString()}</time>
@@ -368,6 +374,52 @@ function TakeoverList({ recovery }: { recovery: RecoveryState | undefined }) {
 
 function processStubCommand(): string[] {
   return ["node", "-e", "console.log(process.cwd())"];
+}
+
+function realmGateLabel(state: string): string {
+  const labels: Record<string, string> = {
+    available: "open gate",
+    missing: "lost gate",
+    corrupt: "broken gate"
+  };
+  return labels[state] ?? state;
+}
+
+function questStateLabel(state: string): string {
+  const labels: Record<string, string> = {
+    created: "drafted",
+    queued: "in queue",
+    running: "on quest",
+    claimed: "claimed",
+    interrupted: "halted",
+    terminated: "ended",
+    exited: "sealed",
+    failed: "failed",
+    unknown: "fogged",
+    orphaned: "stray"
+  };
+  return labels[state] ?? state;
+}
+
+function dispatchTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    status: "herald",
+    log: "scribe",
+    error: "alarm",
+    policy: "edict",
+    takeover: "claim"
+  };
+  return labels[type] ?? type;
+}
+
+function claimActionLabel(action: string): string {
+  const labels: Record<string, string> = {
+    claim: "claimed",
+    interrupt: "halted",
+    terminate: "ended",
+    follow_up: "new writ"
+  };
+  return labels[action] ?? action;
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

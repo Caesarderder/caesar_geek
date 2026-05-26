@@ -1,0 +1,7 @@
+interface:
+  display_name: "caesar 中文文档"
+  short_description: "从零创建、更新并审查中文知识地图"
+  default_prompt: "使用 $caesar-docs，为这个仓库创建或更新可移植的中文知识地图。"
+
+policy:
+  allow_implicit_invocation: true
