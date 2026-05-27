@@ -43,6 +43,7 @@ export const geekTaskStatusSchema = z.enum([
   "claimed",
   "interrupted",
   "terminated",
+  "rejected",
   "exited",
   "failed",
   "unknown",
@@ -116,11 +117,28 @@ export const policyDecisionSchema = z.object({
   requiresApproval: z.boolean()
 });
 
+export const approvalDecisionStatusSchema = z.enum(["pending", "approved", "rejected", "expired", "bypassed"]);
+
+export const approvalRecordSchema = z.object({
+  id: idSchema,
+  taskId: idSchema,
+  status: approvalDecisionStatusSchema,
+  action: highRiskActionSchema,
+  reason: z.string(),
+  requestedBy: z.string().min(1),
+  decidedBy: z.string().nullable(),
+  createdAt: isoDateSchema,
+  updatedAt: isoDateSchema,
+  decidedAt: isoDateSchema.nullable(),
+  expiresAt: isoDateSchema.nullable()
+});
+
 export const taskRecoverySchema = z.object({
   awesome: awesomeSchema,
   ultraworks: z.array(ultraworkSchema),
   tasks: z.array(geekTaskSchema),
   taskUltraworks: z.array(geekTaskUltraworkSchema),
+  approvals: z.array(approvalRecordSchema),
   takeoverEvents: z.array(takeoverEventSchema),
   latestEvents: z.array(taskEventSchema)
 });
@@ -136,9 +154,26 @@ export type TakeoverEvent = z.infer<typeof takeoverEventSchema>;
 export type RuntimeSession = z.infer<typeof runtimeSessionSchema>;
 export type HighRiskAction = z.infer<typeof highRiskActionSchema>;
 export type PolicyDecision = z.infer<typeof policyDecisionSchema>;
+export type ApprovalDecisionStatus = z.infer<typeof approvalDecisionStatusSchema>;
+export type ApprovalRecord = z.infer<typeof approvalRecordSchema>;
 export type TaskRecovery = z.infer<typeof taskRecoverySchema>;
 
 const sensitiveFilePattern = /(^|[/\\])(\.env(\..*)?|id_rsa|id_ed25519|.*private.*key.*|.*credential.*|.*secret.*)([/\\]|$)/i;
+const codexExecAliases = new Set(["exec", "e"]);
+
+export function buildCodexExecCommand(prompt: string): string[] {
+  return [
+    "codex",
+    "exec",
+    "--json",
+    "--color",
+    "never",
+    "--sandbox",
+    "workspace-write",
+    "--skip-git-repo-check",
+    prompt
+  ];
+}
 
 export function classifyHighRiskAction(input: {
   command?: string[];
@@ -146,7 +181,7 @@ export function classifyHighRiskAction(input: {
   scopePath?: string;
   externalDestination?: string;
 }): PolicyDecision {
-  const commandText = input.command?.join(" ") ?? "";
+  const commandText = directCommandText(input.command);
   const targetPath = input.targetPath ?? "";
 
   if (input.scopePath && targetPath && !isPathWithinScope(targetPath, input.scopePath)) {
@@ -211,6 +246,16 @@ export function classifyHighRiskAction(input: {
     reason: "Action is within local MVP policy.",
     requiresApproval: false
   };
+}
+
+function directCommandText(command: string[] | undefined): string {
+  if (!command || command.length === 0) {
+    return "";
+  }
+  if (command[0] === "codex" && command[1] && codexExecAliases.has(command[1])) {
+    return command.slice(0, -1).join(" ");
+  }
+  return command.join(" ");
 }
 
 export function nowIso(): string {

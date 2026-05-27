@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
+  ApprovalRecord,
   Awesome,
   GeekTask,
   GeekTaskUltrawork,
@@ -151,6 +152,19 @@ export class AwesomeStore {
         started_at TEXT NOT NULL,
         ended_at TEXT
       );
+      CREATE TABLE IF NOT EXISTS approvals (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        action TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        requested_by TEXT NOT NULL,
+        decided_by TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        decided_at TEXT,
+        expires_at TEXT
+      );
     `);
     return new AwesomeStore(db);
   }
@@ -285,6 +299,60 @@ export class AwesomeStore {
     }));
   }
 
+  createApproval(approval: ApprovalRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO approvals
+         (id, task_id, status, action, reason, requested_by, decided_by, created_at, updated_at, decided_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        approval.id,
+        approval.taskId,
+        approval.status,
+        approval.action,
+        approval.reason,
+        approval.requestedBy,
+        approval.decidedBy,
+        approval.createdAt,
+        approval.updatedAt,
+        approval.decidedAt,
+        approval.expiresAt
+      );
+  }
+
+  updateApprovalDecision(
+    approvalId: string,
+    patch: Pick<ApprovalRecord, "status" | "decidedBy" | "decidedAt">
+  ): ApprovalRecord {
+    const current = this.getApproval(approvalId);
+    if (!current) {
+      throw new Error(`Unknown approval: ${approvalId}`);
+    }
+    const next: ApprovalRecord = { ...current, ...patch, updatedAt: nowIso() };
+    this.db
+      .prepare(
+        `UPDATE approvals
+         SET status = ?, decided_by = ?, updated_at = ?, decided_at = ?
+         WHERE id = ?`
+      )
+      .run(next.status, next.decidedBy, next.updatedAt, next.decidedAt, approvalId);
+    return next;
+  }
+
+  getApproval(approvalId: string): ApprovalRecord | null {
+    const row = this.db.prepare("SELECT * FROM approvals WHERE id = ?").get(approvalId) as Row | undefined;
+    return row ? mapApproval(row) : null;
+  }
+
+  listApprovals(status?: ApprovalRecord["status"]): ApprovalRecord[] {
+    const query = status
+      ? this.db.prepare("SELECT * FROM approvals WHERE status = ? ORDER BY created_at DESC")
+      : this.db.prepare("SELECT * FROM approvals ORDER BY created_at DESC");
+    const rows = status ? query.all(status) : query.all();
+    return rows.map((row) => mapApproval(row as Row));
+  }
+
   appendEvent(event: TaskEvent): void {
     this.db
       .prepare("INSERT INTO task_events (id, task_id, type, message, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
@@ -359,7 +427,7 @@ export class AwesomeStore {
         latestSessions.set(session.taskId, session);
       }
     }
-    const tasks = this.listTasks().filter((task) => task.status === "running" || task.status === "queued");
+    const tasks = this.listTasks().filter((task) => task.status === "running");
     for (const task of tasks) {
       const session = latestSessions.get(task.id);
       const recoveredStatus = session?.status === "exited" ? "exited" : session?.status === "orphaned" ? "orphaned" : "unknown";
@@ -392,5 +460,21 @@ function mapTask(row: Row): GeekTask {
     endedAt: row.ended_at ? String(row.ended_at) : null,
     claimedAt: row.claimed_at ? String(row.claimed_at) : null,
     claimedBy: row.claimed_by ? String(row.claimed_by) : null
+  };
+}
+
+function mapApproval(row: Row): ApprovalRecord {
+  return {
+    id: String(row.id),
+    taskId: String(row.task_id),
+    status: row.status as ApprovalRecord["status"],
+    action: row.action as ApprovalRecord["action"],
+    reason: String(row.reason),
+    requestedBy: String(row.requested_by),
+    decidedBy: row.decided_by ? String(row.decided_by) : null,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+    decidedAt: row.decided_at ? String(row.decided_at) : null,
+    expiresAt: row.expires_at ? String(row.expires_at) : null
   };
 }

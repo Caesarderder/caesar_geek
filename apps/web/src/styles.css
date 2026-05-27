@@ -474,6 +474,12 @@ textarea {
   box-shadow: 0 4px 0 #87939d;
 }
 
+.iconText.danger {
+  border-color: #8e4a4a;
+  color: #742f2f;
+  box-shadow: 0 4px 0 #8e4a4a;
+}
+
 .iconOnly {
   width: 42px;
   height: 42px;
@@ -486,7 +492,8 @@ textarea {
 .awesomeList,
 .rows,
 .events,
-.takeovers {
+.takeovers,
+.approvalList {
   display: grid;
   gap: 8px;
 }
@@ -496,7 +503,8 @@ textarea {
 .taskRow,
 .taskHead,
 .event,
-.takeover {
+.takeover,
+.approvalRow {
   display: grid;
   gap: 8px;
   align-items: center;
@@ -519,7 +527,8 @@ textarea {
 .row:hover,
 .taskRow:hover,
 .event:hover,
-.takeover:hover {
+.takeover:hover,
+.approvalRow:hover {
   border-color: #7f8992;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.72) 0 34%, transparent 34% 100%) 0 0 / 72px 48px,
@@ -549,7 +558,8 @@ textarea {
 
 .row strong,
 .taskRow strong,
-.takeover strong {
+.takeover strong,
+.approvalRow strong {
   color: var(--ink);
 }
 
@@ -667,6 +677,44 @@ textarea {
 
 .takeover {
   grid-template-columns: 100px 120px minmax(140px, 1fr) 180px minmax(160px, 1fr);
+}
+
+.approvalRow {
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 0.55fr) 100px auto;
+}
+
+.approvalRow > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.approvalRow code,
+.approvalRow span,
+.approvalRow time {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #3f4a54;
+}
+
+.approvalRow[data-state="pending"] {
+  border-color: #9e8252;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.62) 0 34%, transparent 34% 100%) 0 0 / 72px 48px,
+    #fff8eb;
+}
+
+.approvalRow[data-state="rejected"] .status {
+  color: var(--ruby);
+}
+
+.emptyState {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .takeover code,
@@ -874,6 +922,7 @@ textarea {
   .taskRow,
   .row,
   .takeover,
+  .approvalRow,
   .codexBody,
   .codexTerms {
     grid-template-columns: 1fr;
@@ -896,7 +945,8 @@ textarea {
   }
 
   .taskRow,
-  .takeover {
+  .takeover,
+  .approvalRow {
     align-items: stretch;
   }
 
@@ -1203,6 +1253,7 @@ textarea {
   .taskRow,
   .event,
   .takeover,
+  .approvalRow,
   .awesomeRow {
     padding: 8px;
     border-width: 2px;
@@ -1297,7 +1348,10 @@ textarea {
   .event code,
   .takeover code,
   .takeover span,
-  .takeover time {
+  .takeover time,
+  .approvalRow code,
+  .approvalRow span,
+  .approvalRow time {
     white-space: normal;
     overflow-wrap: anywhere;
   }

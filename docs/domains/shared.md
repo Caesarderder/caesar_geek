@@ -4,12 +4,13 @@ km_type: domain
 domain: shared
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-26
+last_verified: 2026-05-27
 source_of_truth:
   - packages/shared/src/index.ts
   - packages/shared/src/index.test.ts
 validated_by:
   - manual-code-read
+  - pnpm --filter @caesar-geek/shared test
 tags:
   - domain:shared
   - risk:safety-boundary
@@ -29,13 +30,15 @@ related:
 ## 什么时候读
 
 - 改公开数据模型。
-- 改 policy classification。
+- 改 policy classification 或默认 Codex CLI 命令构造。
 - 改 `awesome`、`ultrawork`、`geek` task 状态或事件 payload。
 
 ## 职责
 
-- 定义 `Awesome`、`RegistryRecord`、`Ultrawork`、`GeekTask`、`TaskEvent`、`TakeoverEvent`、`RuntimeSession`、`TaskRecovery`。
+- 定义 `Awesome`、`RegistryRecord`、`Ultrawork`、`GeekTask`、`TaskEvent`、`TakeoverEvent`、`RuntimeSession`、`ApprovalRecord`、`TaskRecovery`。
 - 统一 `GeekTaskStatus` 枚举。
+- 统一 approval decision 状态：`pending`、`approved`、`rejected`、`expired`、`bypassed`。
+- 生成默认 Codex CLI 非交互命令：`codex exec --json --sandbox workspace-write --skip-git-repo-check <prompt>`。
 - 分类 out-of-scope write、broad delete、remote push、global install、system config、sensitive file access、secret exfiltration。
 
 ## 不是本层职责
@@ -47,6 +50,7 @@ related:
 
 - 改 schema 必须同步 server、frontend 和 docs glossary。
 - 高风险分类缺口可能影响本地安全边界，必须配测试。
+- Codex exec 的 prompt 文本不是直接 shell 命令，policy classifier 不能把 prompt 里的 `git push`、`sudo` 等字样误判为已启动的 shell 动作。
 
 ## 入口
 

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { GeekTask, RegistryRecord, TaskEvent, Ultrawork } from "@caesar-geek/shared";
+import type { ApprovalRecord, GeekTask, RegistryRecord, TaskEvent, Ultrawork } from "@caesar-geek/shared";
 import "./styles.css";
 
 type TrpcClient = {
@@ -33,11 +33,16 @@ type TrpcClient = {
   };
   tasks: {
     recovery: { query(): Promise<RecoveryState> };
-    create: { mutate(input: { title: string; prompt: string; command: string[]; ultraworkIds: string[]; launch: boolean }): Promise<{ task: GeekTask | null; policy: { allowed: boolean; reason: string } }> };
+    create: { mutate(input: { title: string; prompt: string; command?: string[]; ultraworkIds: string[]; launch: boolean }): Promise<{ task: GeekTask; policy: { allowed: boolean; reason: string }; approval: ApprovalRecord | null }> };
     followUp: { mutate(input: { taskId: string; claimedBy: string; prompt: string; command: string[]; launch: boolean }): Promise<GeekTask> };
     claim: { mutate(input: { taskId: string; claimedBy: string; note?: string }): Promise<unknown> };
     interrupt: { mutate(input: { taskId: string }): Promise<{ interrupted: boolean }> };
     terminate: { mutate(input: { taskId: string }): Promise<{ terminated: boolean }> };
+  };
+  approvals: {
+    listPending: { query(): Promise<ApprovalRecord[]> };
+    approve: { mutate(input: { approvalId: string; decidedBy?: string }): Promise<ApprovalRecord> };
+    reject: { mutate(input: { approvalId: string; decidedBy?: string }): Promise<ApprovalRecord> };
   };
 };
 
@@ -46,6 +51,7 @@ type RecoveryState = {
   ultraworks: Ultrawork[];
   tasks: GeekTask[];
   taskUltraworks: Array<{ taskId: string; ultraworkId: string }>;
+  approvals: ApprovalRecord[];
   takeoverEvents: Array<{ id: string; taskId: string; claimedBy: string; action: string; note: string | null; createdAt: string }>;
   latestEvents: TaskEvent[];
 };
@@ -123,6 +129,7 @@ function WorkspaceConsole() {
         <nav className="quickNav" aria-label="Console sections">
           <a href="#races">Races</a>
           <a href="#scroll">Scroll</a>
+          <a href="#approvals">Approvals</a>
           <a href="#quests">Quests</a>
           <a href="#claims">Claims</a>
           <a href="#bonds">Bonds</a>
@@ -142,6 +149,10 @@ function WorkspaceConsole() {
           <section className="panel wide" id="quests">
             <PanelTitle icon={<Hammer size={17} />} title="Quest Ledger" />
             <TaskTable recovery={recovery.data} />
+          </section>
+          <section className="panel wide" id="approvals">
+            <PanelTitle icon={<ShieldAlert size={17} />} title="Approval Gate" />
+            <ApprovalGate recovery={recovery.data} />
           </section>
           <section className="panel wide" id="claims">
             <PanelTitle icon={<UserCheck size={17} />} title="Role Claims" />
@@ -295,19 +306,21 @@ function UltraworkPanel({ ultraworks }: { ultraworks: Ultrawork[] }) {
 
 function TaskCreator({ ultraworks }: { ultraworks: Ultrawork[] }) {
   const qc = useQueryClient();
-  const [title, setTitle] = useState("Scan the World");
-  const [prompt, setPrompt] = useState("Run a world command");
-  const [command, setCommand] = useState(`${JSON.stringify(processStubCommand())}`);
+  const [title, setTitle] = useState("Ask Codex");
+  const [prompt, setPrompt] = useState("Inspect this world and summarize the repository layout.");
+  const [command, setCommand] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const create = useMutation({
-    mutationFn: () =>
-      trpc.tasks.create.mutate({
+    mutationFn: () => {
+      const trimmedCommand = command.trim();
+      return trpc.tasks.create.mutate({
         title,
         prompt,
-        command: JSON.parse(command) as string[],
+        ...(trimmedCommand ? { command: JSON.parse(trimmedCommand) as string[] } : {}),
         ultraworkIds: selected,
         launch: true
-      }),
+      });
+    },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["recovery"] });
     }
@@ -324,7 +337,7 @@ function TaskCreator({ ultraworks }: { ultraworks: Ultrawork[] }) {
       </label>
       <label>
         <span>Command JSON</span>
-        <input value={command} onChange={(event) => setCommand(event.target.value)} />
+        <input value={command} onChange={(event) => setCommand(event.target.value)} placeholder="empty = codex exec prompt" />
       </label>
       <div className="checks">
         {ultraworks.map((ultrawork) => (
@@ -347,9 +360,53 @@ function TaskCreator({ ultraworks }: { ultraworks: Ultrawork[] }) {
       {create.data && !create.data.policy.allowed ? (
         <p className="policy">
           <ShieldAlert size={15} />
-          {create.data.policy.reason}
+          {create.data.approval ? `Approval queued: ${create.data.policy.reason}` : create.data.policy.reason}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function ApprovalGate({ recovery }: { recovery: RecoveryState | undefined }) {
+  const qc = useQueryClient();
+  const approve = useMutation({
+    mutationFn: (approvalId: string) => trpc.approvals.approve.mutate({ approvalId, decidedBy: "operator" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["recovery"] })
+  });
+  const reject = useMutation({
+    mutationFn: (approvalId: string) => trpc.approvals.reject.mutate({ approvalId, decidedBy: "operator" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["recovery"] })
+  });
+  const taskNames = new Map((recovery?.tasks ?? []).map((task) => [task.id, task.title]));
+  const approvals = recovery?.approvals ?? [];
+
+  return (
+    <div className="approvalList">
+      {approvals.length === 0 ? <p className="emptyState">No persisted approval decisions for this world.</p> : null}
+      {approvals.map((approval) => (
+        <div className="approvalRow" key={approval.id} data-state={approval.status}>
+          <div>
+            <strong>{taskNames.get(approval.taskId) ?? approval.taskId}</strong>
+            <span>{approval.reason}</span>
+          </div>
+          <code>{approval.action}</code>
+          <span className="status">{approvalStatusLabel(approval.status)}</span>
+          {approval.status === "pending" ? (
+            <div className="actions">
+              <button className="iconText" disabled={approve.isPending} onClick={() => approve.mutate(approval.id)}>
+                <Play size={15} />
+                Approve
+              </button>
+              <button className="iconText danger" disabled={reject.isPending} onClick={() => reject.mutate(approval.id)}>
+                <X size={15} />
+                Reject
+              </button>
+            </div>
+          ) : (
+            <time>{approval.decidedAt ? new Date(approval.decidedAt).toLocaleString() : new Date(approval.updatedAt).toLocaleString()}</time>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -602,10 +659,6 @@ function CodexModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function processStubCommand(): string[] {
-  return ["node", "-e", "console.log(process.cwd())"];
-}
-
 function worldGateLabel(state: string): string {
   const labels: Record<string, string> = {
     available: "open world",
@@ -623,10 +676,22 @@ function questStateLabel(state: string): string {
     claimed: "claimed",
     interrupted: "halted",
     terminated: "ended",
+    rejected: "rejected",
     exited: "sealed",
     failed: "failed",
     unknown: "fogged",
     orphaned: "stray"
+  };
+  return labels[state] ?? state;
+}
+
+function approvalStatusLabel(state: string): string {
+  const labels: Record<string, string> = {
+    pending: "pending",
+    approved: "approved",
+    rejected: "rejected",
+    expired: "expired",
+    bypassed: "bypassed"
   };
   return labels[state] ?? state;
 }

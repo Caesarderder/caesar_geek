@@ -4,7 +4,7 @@ km_type: reference
 domain: architecture
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-26
+last_verified: 2026-05-27
 source_of_truth:
   - README.md
   - package.json
@@ -17,6 +17,8 @@ source_of_truth:
   - packages/agent-runtime/src/index.ts
 validated_by:
   - manual-code-read
+  - pnpm --filter @caesar-geek/server test
+  - pnpm --filter @caesar-geek/web typecheck
 tags:
   - domain:architecture
 related:
@@ -40,7 +42,9 @@ related:
 - 持久化使用 Node `node:sqlite` 的 `DatabaseSync`，当前没有 Drizzle schema 文件；`db:generate`/`db:migrate` 是占位脚本。
 - known-awesome registry 默认位置由 `CAESAR_GEEK_HOME` 或 home 下 `.caesar-geek/registry.sqlite` 决定。
 - 每个 awesome 的数据库位于 `awesome/.caesar-geek/db.sqlite`。
-- runtime 使用 Node `child_process.spawn` 启动任务。
+- per-awesome SQLite 持久化 approval decisions；高风险 task 保存为 `queued`，批准后按原始 task intent 启动，拒绝后标记为 `rejected`。
+- runtime 使用 Node `child_process.spawn` 启动任务；默认 geek task 通过本地已登录的 `codex exec --json --sandbox workspace-write --skip-git-repo-check <prompt>` 运行。
+- Browser 不读取 Codex/ChatGPT 登录缓存；Codex 认证由本机 CLI 和 credential store 处理。
 - `.omx` 规划要求后续持续围绕 create/select awesome、add ultrawork、persist task、launch geek、recover state 的 MVP 路径推进。
 
 ## 入口或路径
@@ -56,13 +60,13 @@ related:
 
 ## 当前实现链路
 
-Browser UI 调用 tRPC -> server 维护 active awesome -> SQLite store 记录状态 -> workspace 包处理本地路径/git clone -> runtime 包启动进程并产生日志/状态事件 -> SSE 推送给 UI -> recovery query 从 SQLite 恢复视图。
+Browser UI 调用 tRPC -> server 维护 active awesome -> SQLite store 记录状态 -> workspace 包处理本地路径/git clone -> server 为默认任务构造 Codex CLI 命令 -> runtime 包启动进程并产生日志/状态事件 -> SSE 推送给 UI -> recovery query 从 SQLite 恢复视图。
 
 ## 计划但需验证的目标
 
 - `.omx` 计划提到 SQLite + Drizzle；当前代码实际使用 `node:sqlite`。
-- `.omx` 计划提到 Codex CLI；当前 UI 默认提供 stub command，API 默认 command 是 `["codex"]`。
-- `.omx` 计划要求安全审批 UI；当前代码已有 classifier，审批流仍需以后实现。
+- `.omx` 计划提到 Codex CLI；当前 UI 默认提交 prompt，server 默认生成 `codex exec` command；高级 command JSON 仍可覆盖。
+- `.omx` hardening plan 要求安全审批 UI；当前代码已有 persisted approval gate、approve/reject API 和前端审批面板，后续仍可补充过期与 bypass 策略。
 
 ## 验证
 

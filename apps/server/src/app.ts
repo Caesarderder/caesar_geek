@@ -6,7 +6,15 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { z } from "zod";
 import { GeekRuntime } from "@caesar-geek/agent-runtime";
-import { classifyHighRiskAction, nowIso, type Awesome, type RegistryRecord, type TaskEvent } from "@caesar-geek/shared";
+import {
+  buildCodexExecCommand,
+  classifyHighRiskAction,
+  nowIso,
+  type ApprovalRecord,
+  type Awesome,
+  type RegistryRecord,
+  type TaskEvent
+} from "@caesar-geek/shared";
 import {
   cloneUltrawork,
   createAwesomeLayout,
@@ -56,16 +64,18 @@ function setActiveAwesome(ctx: AppContext, next: ActiveAwesome, reason: string):
 function createRuntime(store: AwesomeStore, ctx: AppContext): GeekRuntime {
   return new GeekRuntime({
     updateTaskStatus: (...args) => store.updateTaskStatus(...args),
-    appendEvent: (event) => {
-      store.appendEvent(event);
-      for (const listener of ctx.events) {
-        listener(event);
-      }
-    },
+    appendEvent: (event) => publishEvent(store, ctx, event),
     appendTakeover: (...args) => store.appendTakeover(...args),
     saveRuntimeSession: (...args) => store.saveRuntimeSession(...args),
     updateRuntimeSession: (...args) => store.updateRuntimeSession(...args)
   });
+}
+
+function publishEvent(store: AwesomeStore, ctx: AppContext, event: TaskEvent): void {
+  store.appendEvent(event);
+  for (const listener of ctx.events) {
+    listener(event);
+  }
 }
 
 export const appRouter = t.router({
@@ -136,6 +146,7 @@ export const appRouter = t.router({
         ultraworks: active.store.listUltraworks(),
         tasks: active.store.listTasks(),
         taskUltraworks: active.store.listTaskUltraworks(),
+        approvals: active.store.listApprovals(),
         takeoverEvents: active.store.listTakeovers(),
         latestEvents: active.store.listEvents()
       };
@@ -145,17 +156,15 @@ export const appRouter = t.router({
         z.object({
           title: z.string().min(1),
           prompt: z.string().min(1),
-          command: z.array(z.string().min(1)).min(1).default(["codex"]),
+          command: z.array(z.string().min(1)).min(1).optional(),
           ultraworkIds: z.array(z.string()).default([]),
           launch: z.boolean().default(true)
         })
       )
       .mutation(({ ctx, input }) => {
         const active = requireActive(ctx);
-        const policy = classifyHighRiskAction({ command: input.command, scopePath: active.awesome.path });
-        if (!policy.allowed) {
-          return { task: null, policy };
-        }
+        const command = input.command ?? buildCodexExecCommand(input.prompt);
+        const policy = classifyHighRiskAction({ command, scopePath: active.awesome.path });
         const validUltraworkIds = new Set(active.store.listUltraworks().map((ultrawork) => ultrawork.id));
         const unknownUltraworkIds = input.ultraworkIds.filter((id) => !validUltraworkIds.has(id));
         if (unknownUltraworkIds.length > 0) {
@@ -165,22 +174,54 @@ export const appRouter = t.router({
           awesomeId: active.awesome.id,
           title: input.title,
           prompt: input.prompt,
-          command: input.command,
+          command,
           cwd: active.awesome.path
         });
+        if (!policy.allowed) {
+          task.status = "queued";
+        }
         active.store.createTask(task, input.ultraworkIds);
-        active.store.appendEvent({
+        const persistedEvent: TaskEvent = {
           id: `event_${randomUUID()}`,
           taskId: task.id,
           type: "status",
           message: "Geek task persisted before launch.",
           payload: { ultraworkIds: input.ultraworkIds },
           createdAt: nowIso()
-        });
+        };
+        publishEvent(active.store, ctx, persistedEvent);
+        let approval: ApprovalRecord | null = null;
+        if (!policy.allowed && policy.action) {
+          const createdAt = nowIso();
+          approval = {
+            id: `approval_${randomUUID()}`,
+            taskId: task.id,
+            status: "pending",
+            action: policy.action,
+            reason: policy.reason,
+            requestedBy: "operator",
+            decidedBy: null,
+            createdAt,
+            updatedAt: createdAt,
+            decidedAt: null,
+            expiresAt: null
+          };
+          active.store.createApproval(approval);
+          const approvalEvent: TaskEvent = {
+            id: `event_${randomUUID()}`,
+            taskId: task.id,
+            type: "policy",
+            message: "High-risk task is pending persisted approval.",
+            payload: { approvalId: approval.id, action: approval.action, reason: approval.reason },
+            createdAt
+          };
+          publishEvent(active.store, ctx, approvalEvent);
+          return { task, policy, approval };
+        }
         if (input.launch) {
           active.runtime.launch(task);
         }
-        return { task, policy };
+        return { task, policy, approval };
       }),
     followUp: publicProcedure
       .input(
@@ -245,6 +286,72 @@ export const appRouter = t.router({
           ...(input.targetPath ? { targetPath: input.targetPath } : {}),
           ...(input.externalDestination ? { externalDestination: input.externalDestination } : {})
         });
+      })
+  }),
+  approvals: t.router({
+    listPending: publicProcedure.query(({ ctx }) => requireActive(ctx).store.listApprovals("pending")),
+    approve: publicProcedure
+      .input(z.object({ approvalId: z.string().min(1), decidedBy: z.string().min(1).default("operator") }))
+      .mutation(({ ctx, input }) => {
+        const active = requireActive(ctx);
+        const current = active.store.getApproval(input.approvalId);
+        if (!current) {
+          throw new Error(`Unknown approval: ${input.approvalId}`);
+        }
+        if (current.status !== "pending") {
+          throw new Error(`Approval is ${current.status}, not pending.`);
+        }
+        const task = active.store.getTask(current.taskId);
+        if (!task) {
+          throw new Error(`Unknown task for approval: ${current.taskId}`);
+        }
+        if (task.status !== "queued") {
+          throw new Error(`Approved task is ${task.status}, not queued.`);
+        }
+        const decidedAt = nowIso();
+        const approval = active.store.updateApprovalDecision(input.approvalId, {
+          status: "approved",
+          decidedBy: input.decidedBy,
+          decidedAt
+        });
+        publishEvent(active.store, ctx, {
+          id: `event_${randomUUID()}`,
+          taskId: task.id,
+          type: "policy",
+          message: "Persisted approval accepted; launching original task intent.",
+          payload: { approvalId: approval.id, action: approval.action, decidedBy: input.decidedBy },
+          createdAt: decidedAt
+        });
+        active.runtime.launch(task);
+        return approval;
+      }),
+    reject: publicProcedure
+      .input(z.object({ approvalId: z.string().min(1), decidedBy: z.string().min(1).default("operator") }))
+      .mutation(({ ctx, input }) => {
+        const active = requireActive(ctx);
+        const current = active.store.getApproval(input.approvalId);
+        if (!current) {
+          throw new Error(`Unknown approval: ${input.approvalId}`);
+        }
+        if (current.status !== "pending") {
+          throw new Error(`Approval is ${current.status}, not pending.`);
+        }
+        const decidedAt = nowIso();
+        const approval = active.store.updateApprovalDecision(input.approvalId, {
+          status: "rejected",
+          decidedBy: input.decidedBy,
+          decidedAt
+        });
+        active.store.updateTaskStatus(approval.taskId, { status: "rejected", endedAt: decidedAt });
+        publishEvent(active.store, ctx, {
+          id: `event_${randomUUID()}`,
+          taskId: approval.taskId,
+          type: "policy",
+          message: "Persisted approval rejected; task remains non-running.",
+          payload: { approvalId: approval.id, action: approval.action, decidedBy: input.decidedBy },
+          createdAt: decidedAt
+        });
+        return approval;
       })
   })
 });

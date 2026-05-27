@@ -144,6 +144,85 @@ describe("server acceptance path", () => {
     expect(recovery.latestEvents.some((event) => event.message.includes("runtime state"))).toBe(true);
     await restarted.fastify.close();
   });
+
+  it("builds Codex CLI commands for default geek tasks", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cg-home-"));
+    process.env.CAESAR_GEEK_HOME = home;
+    const { fastify, ctx } = await buildServer();
+    const caller = appRouter.createCaller(ctx);
+    const awesomeRoot = await mkdtemp(path.join(tmpdir(), "awesome-codex-"));
+    await caller.awesomes.create({ name: "Codex", path: awesomeRoot });
+
+    const result = await caller.tasks.create({
+      title: "Ask Codex",
+      prompt: "Inspect whether git push is needed; do not run sudo.",
+      ultraworkIds: [],
+      launch: false
+    });
+
+    expect(result.policy.allowed).toBe(true);
+    expect(result.task.command).toEqual([
+      "codex",
+      "exec",
+      "--json",
+      "--color",
+      "never",
+      "--sandbox",
+      "workspace-write",
+      "--skip-git-repo-check",
+      "Inspect whether git push is needed; do not run sudo."
+    ]);
+    expect(result.task.cwd).toBe(awesomeRoot);
+    await fastify.close();
+  });
+
+  it("persists high-risk task approvals and launches only after approval", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cg-home-"));
+    process.env.CAESAR_GEEK_HOME = home;
+    const { fastify, ctx } = await buildServer();
+    const caller = appRouter.createCaller(ctx);
+    const awesomeRoot = await mkdtemp(path.join(tmpdir(), "awesome-approval-"));
+    const created = await caller.awesomes.create({ name: "Approvals", path: awesomeRoot });
+
+    const pending = await caller.tasks.create({
+      title: "High risk launch",
+      prompt: "Requires approval",
+      command: ["sh", "-c", "echo sudo systemctl"],
+      ultraworkIds: [],
+      launch: true
+    });
+    expect(pending.task.status).toBe("queued");
+    expect(pending.approval?.status).toBe("pending");
+
+    let recovery = await caller.tasks.recovery();
+    expect(recovery.approvals).toEqual([expect.objectContaining({ id: pending.approval!.id, status: "pending" })]);
+    expect(recovery.tasks.find((task) => task.id === pending.task.id)?.status).toBe("queued");
+
+    await fastify.close();
+    const restarted = await buildServer();
+    const restartedCaller = appRouter.createCaller(restarted.ctx);
+    await restartedCaller.awesomes.select({ id: created.awesome.id });
+    expect(await restartedCaller.approvals.listPending()).toEqual([
+      expect.objectContaining({ id: pending.approval!.id, taskId: pending.task.id })
+    ]);
+
+    const approved = await restartedCaller.approvals.approve({ approvalId: pending.approval!.id, decidedBy: "operator" });
+    expect(approved.status).toBe("approved");
+    await waitForTaskStatus(restartedCaller, pending.task.id, "exited");
+
+    const rejected = await restartedCaller.tasks.create({
+      title: "Rejected high risk launch",
+      prompt: "Should not run",
+      command: ["git", "push"],
+      ultraworkIds: [],
+      launch: true
+    });
+    await restartedCaller.approvals.reject({ approvalId: rejected.approval!.id, decidedBy: "operator" });
+    recovery = await restartedCaller.tasks.recovery();
+    expect(recovery.tasks.find((task) => task.id === rejected.task.id)?.status).toBe("rejected");
+    expect(recovery.approvals.find((approval) => approval.id === rejected.approval!.id)?.status).toBe("rejected");
+    await restarted.fastify.close();
+  });
 });
 
 async function waitForTaskStatus(

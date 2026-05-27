@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyHighRiskAction, geekTaskSchema } from "./index.js";
+import { approvalRecordSchema, buildCodexExecCommand, classifyHighRiskAction, geekTaskSchema } from "./index.js";
 
 describe("shared contracts", () => {
   it("classifies high-risk commands", () => {
@@ -11,6 +11,22 @@ describe("shared contracts", () => {
     expect(classifyHighRiskAction({ targetPath: "/tmp/awesome/file", scopePath: "/tmp/awesome" }).allowed).toBe(true);
   });
 
+  it("builds a safe default Codex exec command without classifying prompt text as shell", () => {
+    const command = buildCodexExecCommand("Please inspect whether git push is needed; do not run sudo.");
+    expect(command).toEqual([
+      "codex",
+      "exec",
+      "--json",
+      "--color",
+      "never",
+      "--sandbox",
+      "workspace-write",
+      "--skip-git-repo-check",
+      "Please inspect whether git push is needed; do not run sudo."
+    ]);
+    expect(classifyHighRiskAction({ command }).allowed).toBe(true);
+  });
+
   it("validates geek task vocabulary", () => {
     expect(() =>
       geekTaskSchema.parse({
@@ -20,7 +36,7 @@ describe("shared contracts", () => {
         prompt: "Do it",
         command: ["node", "-v"],
         cwd: "/tmp/awesome",
-        status: "running",
+        status: "rejected",
         exitCode: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -28,6 +44,25 @@ describe("shared contracts", () => {
         endedAt: null,
         claimedAt: null,
         claimedBy: null
+      })
+    ).not.toThrow();
+  });
+
+  it("validates persisted approval records", () => {
+    const now = new Date().toISOString();
+    expect(() =>
+      approvalRecordSchema.parse({
+        id: "approval_1",
+        taskId: "task_1",
+        status: "pending",
+        action: "remote_push",
+        reason: "Remote pushes require explicit approval.",
+        requestedBy: "operator",
+        decidedBy: null,
+        createdAt: now,
+        updatedAt: now,
+        decidedAt: null,
+        expiresAt: null
       })
     ).not.toThrow();
   });

@@ -4,13 +4,14 @@ km_type: domain
 domain: backend
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-26
+last_verified: 2026-05-27
 source_of_truth:
   - apps/server/src/app.ts
   - apps/server/src/db/sqlite.ts
   - apps/server/package.json
 validated_by:
   - manual-code-read
+  - pnpm --filter @caesar-geek/server test
 tags:
   - domain:backend
 related:
@@ -36,7 +37,9 @@ related:
 - 创建、选择、列出 known awesomes。
 - 添加 ultrawork 并调用 workspace clone 逻辑。
 - 创建、关联、启动、接管、控制 geek tasks。
-- 持久化 awesome、ultrawork、task、event、takeover、runtime session。
+- 当 task create 未显式传入 command 时，用 shared 的 Codex exec command builder 构造默认 Codex CLI 任务。
+- 持久化 awesome、ultrawork、task、event、takeover、runtime session 和 approval decision。
+- 高风险 task 先保存为 `queued` 并创建 pending approval，批准后按原始 task intent 启动，拒绝后标记为 `rejected`。
 
 ## 不是本层职责
 
@@ -48,6 +51,8 @@ related:
 
 - API 必须通过 active awesome 约束本地操作范围。
 - task 必须在 launch 前或同事务中持久化。
+- Codex 认证凭据只能由本地 CLI/credential store 使用，不能返回给 browser。
+- 待审批的 `queued` task 是可恢复状态，gateway 重启不能把它误标为 `unknown`。
 - SSE 只广播 task 事件，不替代恢复查询。
 
 ## 入口

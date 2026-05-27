@@ -4,13 +4,14 @@ km_type: reference
 domain: code
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-26
+last_verified: 2026-05-27
 source_of_truth:
   - packages/shared/src/index.ts
   - packages/workspace/src/index.ts
   - packages/agent-runtime/src/index.ts
 validated_by:
   - manual-code-read
+  - pnpm --filter @caesar-geek/shared test
 tags:
   - wiki:code-map
   - domain:shared
@@ -37,7 +38,7 @@ related:
 
 ## 职责摘要
 
-- `packages/shared` 提供 Zod schemas、TypeScript types、时间工具和高风险动作分类。
+- `packages/shared` 提供 Zod schemas、TypeScript types、时间工具、高风险动作分类、默认 Codex exec command builder 和审批记录 schema。
 - `packages/workspace` 处理 awesome layout、registry 默认路径、路径 scope、git repo 检测和 clone-first ultrawork。
 - `packages/agent-runtime` 处理 geek task draft、spawn、日志事件、takeover、interrupt、terminate、shutdown。
 
@@ -49,7 +50,7 @@ related:
 
 ## 核心链路
 
-1. Server 引入 shared types 和 policy classifier。
+1. Server 引入 shared types、policy classifier、Codex exec command builder 和 approval record schema。
 2. Server 创建 awesome 或 ultrawork 时调用 workspace 包。
 3. Server 创建 task 后把 task 交给 agent-runtime。
 4. Agent-runtime 通过 persistence interface 回写 server store。
@@ -61,7 +62,8 @@ related:
 
 ## 常见误判
 
-- `packages/shared` 的 policy classifier 只分类，不执行审批流。
+- `packages/shared` 的 policy classifier 只分类，不执行审批流；审批记录由 server SQLite store 持久化。
+- Codex exec 的 prompt 文本不是直接 shell 命令；shared classifier 应只判断实际启动的 Codex CLI 命令参数。
 - `packages/workspace` 不负责持久化表。
 - `packages/agent-runtime` 不知道 ultrawork clone 细节。
 
