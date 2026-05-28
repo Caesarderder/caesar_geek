@@ -4,19 +4,22 @@ km_type: reference
 domain: code
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-26
+last_verified: 2026-05-29
 source_of_truth:
   - apps
   - packages
   - .omx/plans/local-ai-workspace-gateway-plan.md
+  - docs/references/architecture/local-agent-core-rules.md
 validated_by:
   - manual-code-read
+  - manual-requirements-review
 tags:
   - reference:zone-map
   - domain:code
 related:
   - reference.file-ownership
   - reference.architecture-overview
+  - reference.local-agent-core-rules
 ---
 
 # 区域地图
@@ -34,6 +37,7 @@ related:
 | `packages/shared` | 跨包 schema/type/policy | 所有 app/package 的类型兼容性 |
 | `packages/workspace` | 本地路径和 git workspace 操作 | 文件系统安全边界、ultrawork clone |
 | `packages/agent-runtime` | geek process runtime | task 状态机、日志、takeover、shutdown |
+| `未来 Agent daemon` | Mac mini 本地 Gateway 连接、Repo 登记、worktree 创建、Codex 长会话 | WSS 协议、tmux/PTY、worktree lifecycle |
 | `.omx` | 规划、访谈、上下文、运行状态 | 只作规格和计划来源，不替代当前实现 |
 | `docs` | 知识地图 | 工作流、领域、wiki、质量检查 |
 

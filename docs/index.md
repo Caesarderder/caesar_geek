@@ -10,8 +10,10 @@ source_of_truth:
   - package.json
   - .omx/specs/deep-interview-local-ai-workspace-gateway.md
   - .omx/plans/local-ai-workspace-gateway-plan.md
+  - docs/references/architecture/local-agent-core-rules.md
 validated_by:
   - manual-repo-read
+  - manual-requirements-review
 tags:
   - domain:cross-domain
   - workflow:knowledge-query
@@ -20,6 +22,7 @@ related:
   - map.schema
   - map.workflows
   - map.domains
+  - reference.local-agent-core-rules
 ---
 
 # Caesar Geek 知识地图
@@ -33,6 +36,7 @@ related:
 3. [工作流索引](map/workflows.md)：按任务类型选择最小工作流。
 4. [领域索引](map/domains.md)：确认任务归属和实现入口。
 5. [不变量](map/invariants.md)：确认不能破坏的产品和架构约束。
+6. [本地 Agent 核心规则](references/architecture/local-agent-core-rules.md)：确认与公网 Gateway 拆分后的本地执行边界。
 
 ## 目录分区
 
@@ -53,8 +57,9 @@ related:
 - 任务路由以 [工作流索引](map/workflows.md) 为准。
 - 领域归属以 [领域索引](map/domains.md) 和 `docs/domains/` 为准。
 - 当前实现落点以 [文件归属](references/indexes/file-ownership.md) 和 [区域地图](references/indexes/zone-map.md) 为准。
-- 架构叙事以 [架构概览](references/architecture/architecture-overview.md) 为准，但具体文件仍以实现索引和代码为准。
+- 架构叙事以 [架构概览](references/architecture/architecture-overview.md) 和 [本地 Agent 核心规则](references/architecture/local-agent-core-rules.md) 为准，但具体文件仍以实现索引和代码为准。
 - 产品计划和未完成目标以 `.omx/specs/`、`.omx/plans/` 和 [ADR-0001](decisions/ADR-0001-knowledge-map-structure.md) 标记，不等同于当前实现。
+- 公网 Gateway 与本地 Agent 的仓库拆分以 [ADR-0002](decisions/ADR-0002-gateway-agent-split.md) 为准。
 
 ## 常用入口
 

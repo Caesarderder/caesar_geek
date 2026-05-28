@@ -4,21 +4,24 @@ km_type: invariant
 domain: cross-domain
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-26
+last_verified: 2026-05-29
 source_of_truth:
   - .omx/specs/deep-interview-local-ai-workspace-gateway.md
   - .omx/plans/local-ai-workspace-gateway-plan.md
   - packages/shared/src/index.ts
   - packages/workspace/src/index.ts
   - packages/agent-runtime/src/index.ts
+  - docs/references/architecture/local-agent-core-rules.md
 validated_by:
   - manual-code-read
+  - manual-requirements-review
 tags:
   - domain:cross-domain
   - risk:safety-boundary
 related:
   - domain.product
   - reference.architecture-overview
+  - reference.local-agent-core-rules
 ---
 
 # 不变量
@@ -35,6 +38,10 @@ related:
 ## 架构不变量
 
 - 浏览器不能直接访问本地文件系统或进程，必须通过 gateway。
+- 拆分后，`caesar_geek` 是 Mac mini 本地 Agent/runtime 仓库；公网 Gateway 属于 `../caesar_gateway`。
+- Mac mini Agent 必须主动连接公网 Gateway，不要求家里 Mac mini 开放公网入站端口。
+- Codex 长会话必须绑定独立 git worktree，不能直接在原始 repo 目录里开发。
+- worktree 创建路径必须位于 Agent 配置允许的固定根目录下。
 - 持久化恢复以 SQLite/registry 中的记录为事实来源；重启后的进程状态只能表达为 last-known、unknown、exited 或 orphaned。
 - 高风险动作必须在 gateway/runtime 边界建模，不能只在 UI 文案里提示。
 - `docs/` 是长期事实来源；`.omx` 是计划和上下文来源，不能替代知识地图。

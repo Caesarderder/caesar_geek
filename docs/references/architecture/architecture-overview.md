@@ -4,12 +4,13 @@ km_type: reference
 domain: architecture
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-27
+last_verified: 2026-05-29
 source_of_truth:
   - README.md
   - package.json
   - .omx/specs/deep-interview-local-ai-workspace-gateway.md
   - .omx/plans/local-ai-workspace-gateway-plan.md
+  - docs/references/architecture/local-agent-core-rules.md
   - apps/server/src/app.ts
   - apps/web/src/main.tsx
   - packages/shared/src/index.ts
@@ -19,12 +20,14 @@ validated_by:
   - manual-code-read
   - pnpm --filter @caesar-geek/server test
   - pnpm --filter @caesar-geek/web typecheck
+  - manual-requirements-review
 tags:
   - domain:architecture
 related:
   - domain.product
   - reference.file-ownership
   - reference.zone-map
+  - reference.local-agent-core-rules
 ---
 
 # 架构概览
@@ -46,6 +49,7 @@ related:
 - runtime 使用 Node `child_process.spawn` 启动任务；默认 geek task 通过本地已登录的 `codex exec --json --sandbox workspace-write --skip-git-repo-check <prompt>` 运行。
 - Browser 不读取 Codex/ChatGPT 登录缓存；Codex 认证由本机 CLI 和 credential store 处理。
 - `.omx` 规划要求后续持续围绕 create/select awesome、add ultrawork、persist task、launch geek、recover state 的 MVP 路径推进。
+- 2026-05-29 的目标边界更新：公网 Gateway 计划拆到 `../caesar_gateway`；`caesar_geek` 后续聚焦 Mac mini 本地 Agent/runtime、repo registry、git worktree 和持续 Codex Session 管理。
 
 ## 入口或路径
 
