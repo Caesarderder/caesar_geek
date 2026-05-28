@@ -284,3 +284,147 @@ function canonicalPath(value: string): string {
   }
   return `${absolutePrefix}${parts.join("/")}`.replace(/\/$/, "");
 }
+
+
+export const cloudProtocolVersion = 1 as const;
+
+export const cloudMessageTypeSchema = z.enum([
+  "world.status",
+  "world.error",
+  "world.audit",
+  "issue.list.request",
+  "issue.list.result",
+  "issue.create.request",
+  "issue.create.result",
+  "issue.select.request",
+  "repo.scan.request",
+  "repo.scan.result",
+  "repo.import.request",
+  "repo.import.result",
+  "branch.list.request",
+  "branch.list.result",
+  "worktree.create.request",
+  "worktree.create.result",
+  "session.start.request",
+  "session.started",
+  "session.list.request",
+  "session.list.result",
+  "session.select.request",
+  "session.input.request",
+  "session.output",
+  "session.status",
+  "session.interrupt.request",
+  "session.terminate.request"
+]);
+
+const cloudRequestTypes = new Set<string>([
+  "issue.list.request",
+  "issue.create.request",
+  "issue.select.request",
+  "repo.scan.request",
+  "repo.import.request",
+  "branch.list.request",
+  "worktree.create.request",
+  "session.start.request",
+  "session.list.request",
+  "session.select.request",
+  "session.input.request",
+  "session.interrupt.request",
+  "session.terminate.request"
+]);
+
+const cloudRequiredScopes: Partial<Record<CloudMessageType, readonly (keyof CloudProtocolMessage)[]>> = {
+  "issue.select.request": ["worldId", "issueId"],
+  "repo.scan.request": ["worldId"],
+  "repo.import.request": ["worldId"],
+  "branch.list.request": ["worldId", "repoId"],
+  "worktree.create.request": ["worldId", "issueId", "repoId"],
+  "session.start.request": ["worldId", "issueId", "worktreeId"],
+  "session.select.request": ["worldId", "issueId", "sessionId"],
+  "session.input.request": ["worldId", "issueId", "sessionId"],
+  "session.interrupt.request": ["worldId", "issueId", "sessionId"],
+  "session.terminate.request": ["worldId", "issueId", "sessionId"],
+  "session.output": ["worldId", "issueId", "sessionId"],
+  "session.status": ["worldId", "issueId", "sessionId"]
+};
+
+const cloudCredentialKeyPattern = /token|password|passwd|privatekey|private_key|credential|secret|sshkey|ssh_key/i;
+
+export const cloudProtocolMessageBaseSchema = z.object({
+  version: z.literal(cloudProtocolVersion),
+  type: cloudMessageTypeSchema,
+  requestId: z.string().min(1).optional(),
+  worldId: z.string().min(1).optional(),
+  issueId: z.string().min(1).optional(),
+  repoId: z.string().min(1).optional(),
+  worktreeId: z.string().min(1).optional(),
+  sessionId: z.string().min(1).optional(),
+  createdAt: isoDateSchema.optional(),
+  payload: z.record(z.string(), z.unknown()).optional()
+});
+
+export const cloudProtocolMessageSchema = cloudProtocolMessageBaseSchema.superRefine((message, context) => {
+  if (cloudRequestTypes.has(message.type) && !message.requestId) {
+    context.addIssue({ code: "custom", path: ["requestId"], message: "requestId is required for requests." });
+  }
+  if (!message.type.startsWith("world.") && !message.worldId) {
+    context.addIssue({ code: "custom", path: ["worldId"], message: "worldId is required." });
+  }
+  for (const scope of cloudRequiredScopes[message.type] ?? []) {
+    if (!message[scope]) {
+      context.addIssue({ code: "custom", path: [scope], message: `${String(scope)} is required for ${message.type}.` });
+    }
+  }
+  if (message.type === "repo.import.request") {
+    const payload = message.payload ?? {};
+    const allowed = new Set(["gitUrl", "ref", "name"]);
+    for (const key of Object.keys(payload)) {
+      if (!allowed.has(key)) {
+        context.addIssue({ code: "custom", path: ["payload", key], message: `Unsupported repo import field: ${key}.` });
+      }
+    }
+    if (containsCloudCredentialKey(payload)) {
+      context.addIssue({ code: "custom", path: ["payload"], message: "Browser-supplied git credentials are not allowed." });
+    }
+    if (typeof payload.gitUrl !== "string" || !isAllowedCloudGitUrl(payload.gitUrl)) {
+      context.addIssue({ code: "custom", path: ["payload", "gitUrl"], message: "A valid gitUrl is required." });
+    } else if (hasCloudUrlCredentials(payload.gitUrl)) {
+      context.addIssue({ code: "custom", path: ["payload", "gitUrl"], message: "gitUrl must not contain credentials." });
+    }
+  }
+});
+
+export type CloudMessageType = z.infer<typeof cloudMessageTypeSchema>;
+export type CloudProtocolMessage = z.infer<typeof cloudProtocolMessageBaseSchema>;
+
+export function parseCloudProtocolMessage(value: unknown): CloudProtocolMessage {
+  return cloudProtocolMessageSchema.parse(value) as CloudProtocolMessage;
+}
+
+export function isCloudProtocolMessage(value: unknown): value is CloudProtocolMessage {
+  return cloudProtocolMessageSchema.safeParse(value).success;
+}
+
+function containsCloudCredentialKey(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value as Record<string, unknown>).some(([key, nested]) => cloudCredentialKeyPattern.test(key) || containsCloudCredentialKey(nested));
+}
+
+function isAllowedCloudGitUrl(value: string): boolean {
+  if (/^git@[^:]+:[^\s]+\.git$/i.test(value)) return true;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:" || url.protocol === "ssh:") && url.hostname.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function hasCloudUrlCredentials(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.username.length > 0 || url.password.length > 0;
+  } catch {
+    return false;
+  }
+}
