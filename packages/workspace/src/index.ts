@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, realpath, stat } from "node:fs/promises";
+import { mkdir, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -9,9 +9,38 @@ import { nowIso } from "@caesar-geek/shared";
 
 const execFileAsync = promisify(execFile);
 
+type GitExec = (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
+
 export type WorkspacePaths = {
   appDataDir: string;
   registryDbPath: string;
+};
+
+export type WorldIssue = {
+  id: string;
+  title: string;
+  slug: string;
+  path: string;
+  worktreesPath: string;
+  createdAt: string;
+};
+
+export type WorldRepoRecord = {
+  id: string;
+  name: string;
+  path: string;
+  defaultBranch: string | null;
+  headSha: string | null;
+};
+
+export type WorldWorktree = {
+  id: string;
+  issueId: string;
+  repoId: string;
+  name: string;
+  branch: string;
+  path: string;
+  createdAt: string;
 };
 
 export function defaultWorkspacePaths(): WorkspacePaths {
@@ -39,6 +68,98 @@ export async function assertInsideScope(candidate: string, scope: string): Promi
     throw new Error(`Path ${candidate} is outside scope ${scope}`);
   }
   return resolvedCandidate;
+}
+
+export async function createWorldIssueLayout(input: {
+  worldRootPath: string;
+  title: string;
+  id?: string;
+}): Promise<WorldIssue> {
+  const createdAt = nowIso();
+  const id = input.id ?? `issue_${randomUUID()}`;
+  const slug = slugify(input.title);
+  const issuesRoot = path.join(path.resolve(input.worldRootPath), "issues");
+  const issuePath = path.join(issuesRoot, `${slug}-${id}`);
+  await assertInsideScope(issuePath, issuesRoot);
+
+  const worktreesPath = path.join(issuePath, "worktrees");
+  await mkdir(worktreesPath, { recursive: true });
+  await mkdir(path.join(issuePath, "sessions"), { recursive: true });
+
+  return {
+    id,
+    title: input.title,
+    slug,
+    path: issuePath,
+    worktreesPath,
+    createdAt
+  };
+}
+
+export async function scanGitRepositories(input: {
+  rootPath: string;
+  maxDepth?: number;
+}): Promise<WorldRepoRecord[]> {
+  const rootPath = path.resolve(input.rootPath);
+  const rootRealPath = await realpath(rootPath);
+  const maxDepth = input.maxDepth ?? 2;
+  const repos: WorldRepoRecord[] = [];
+
+  async function visit(currentPath: string, depth: number): Promise<void> {
+    await assertInsideScope(currentPath, rootRealPath);
+    if (await isGitRepository(currentPath)) {
+      const metadata = await readGitMetadata(currentPath);
+      repos.push({
+        id: `repo_${slugify(path.basename(currentPath))}`,
+        name: path.basename(currentPath),
+        path: currentPath,
+        defaultBranch: metadata.defaultBranch,
+        headSha: metadata.headSha
+      });
+      return;
+    }
+    if (depth >= maxDepth) return;
+
+    const entries = await readdir(currentPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || shouldSkipRepoScanDirectory(entry.name)) continue;
+      await visit(path.join(currentPath, entry.name), depth + 1);
+    }
+  }
+
+  await visit(rootRealPath, 0);
+  return repos.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+export async function importGitRepository(input: {
+  worldRootPath: string;
+  gitUrl: string;
+  ref?: string;
+  name?: string;
+  execGit?: GitExec;
+}): Promise<WorldRepoRecord> {
+  rejectCredentialFields(input as Record<string, unknown>);
+  assertGitUrlHasNoCredentials(input.gitUrl);
+
+  const git = input.execGit ?? execFileAsync;
+  const repoCacheRoot = path.join(path.resolve(input.worldRootPath), "repos");
+  const repoName = input.name ? slugify(input.name) : slugify(path.basename(input.gitUrl.replace(/\.git$/i, "")));
+  const destinationPath = path.join(repoCacheRoot, repoName);
+  await assertInsideScope(destinationPath, repoCacheRoot);
+  await mkdir(repoCacheRoot, { recursive: true });
+
+  await git("git", ["clone", input.gitUrl, destinationPath]);
+  if (input.ref) {
+    await git("git", ["-C", destinationPath, "checkout", input.ref]);
+  }
+  const metadata = await readGitMetadata(destinationPath);
+  return {
+    id: `repo_${repoName}`,
+    name: repoName,
+    path: destinationPath,
+    defaultBranch: metadata.defaultBranch,
+    headSha: metadata.headSha
+  };
 }
 
 export async function createAwesomeLayout(input: {
@@ -101,6 +222,66 @@ export async function readGitMetadata(repoPath: string): Promise<{
   return { defaultBranch, headSha };
 }
 
+export async function listGitBranches(input: {
+  repoPath: string;
+  execGit?: GitExec;
+}): Promise<string[]> {
+  const git = input.execGit ?? execFileAsync;
+  if (!(await isGitRepository(input.repoPath))) {
+    throw new Error(`Path is not a git repository: ${input.repoPath}`);
+  }
+  const { stdout } = await git("git", ["-C", input.repoPath, "branch", "--format=%(refname:short)"]);
+  return stdout
+    .split("\n")
+    .map((branch) => branch.trim())
+    .filter(Boolean)
+    .sort();
+}
+
+export async function createIssueWorktree(input: {
+  issue: Pick<WorldIssue, "id" | "worktreesPath">;
+  repo: Pick<WorldRepoRecord, "id" | "path">;
+  branch: string;
+  name?: string;
+  id?: string;
+  execGit?: GitExec;
+}): Promise<WorldWorktree> {
+  if (!(await isGitRepository(input.repo.path))) {
+    throw new Error(`Repo path is not a git repository: ${input.repo.path}`);
+  }
+
+  const git = input.execGit ?? execFileAsync;
+  const id = input.id ?? `worktree_${randomUUID()}`;
+  const name = input.name ?? input.branch;
+  const destinationPath = path.join(path.resolve(input.issue.worktreesPath), `${slugify(name)}-${id}`);
+  await assertInsideScope(destinationPath, input.issue.worktreesPath);
+  await mkdir(input.issue.worktreesPath, { recursive: true });
+  await git("git", ["-C", input.repo.path, "worktree", "add", destinationPath, input.branch]);
+
+  return {
+    id,
+    issueId: input.issue.id,
+    repoId: input.repo.id,
+    name,
+    branch: input.branch,
+    path: destinationPath,
+    createdAt: nowIso()
+  };
+}
+
+export async function assertIssueSessionCwd(input: {
+  issueRootPath: string;
+  worktreePaths: string[];
+  cwd?: string;
+}): Promise<string> {
+  if (input.worktreePaths.length === 0) {
+    throw new Error("Issue-scope Agent sessions require at least one worktree repo.");
+  }
+  const cwd = path.resolve(input.cwd ?? input.issueRootPath);
+  await assertInsideScope(cwd, input.issueRootPath);
+  return cwd;
+}
+
 export async function resolveUltraworkDestination(input: {
   awesomePath: string;
   sourcePath: string;
@@ -146,4 +327,32 @@ export async function cloneUltrawork(input: {
     headSha: metadata.headSha,
     createdAt: nowIso()
   };
+}
+
+function shouldSkipRepoScanDirectory(name: string): boolean {
+  return name === ".git" || name === "node_modules" || name === ".caesar-geek";
+}
+
+function rejectCredentialFields(value: Record<string, unknown>): void {
+  const credentialKeyPattern = /token|password|passwd|privatekey|private_key|credential|secret|sshkey|ssh_key/i;
+  for (const [key, nested] of Object.entries(value)) {
+    if (credentialKeyPattern.test(key)) {
+      throw new Error("Browser-supplied git credentials are not allowed.");
+    }
+    if (nested && typeof nested === "object") {
+      rejectCredentialFields(nested as Record<string, unknown>);
+    }
+  }
+}
+
+function assertGitUrlHasNoCredentials(value: string): void {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password) {
+      throw new Error("gitUrl must not contain credentials.");
+    }
+  } catch (error) {
+    if (error instanceof TypeError) return;
+    throw error;
+  }
 }
