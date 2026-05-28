@@ -234,3 +234,216 @@ export class GeekRuntime {
     }
   }
 }
+
+export type CodexSessionStatus = "starting" | "live" | "interrupted" | "terminated" | "exited" | "unknown";
+
+export type CodexSessionRecord = {
+  id: string;
+  worldId: string;
+  issueId: string;
+  tmuxSessionName: string;
+  tmuxTarget: string;
+  cwd: string;
+  command: string[];
+  status: CodexSessionStatus;
+  startedAt: string;
+  endedAt: string | null;
+  outputBuffer: string[];
+};
+
+export type CodexSessionEvent = {
+  id: string;
+  type: "session.started" | "session.output" | "session.status";
+  worldId: string;
+  issueId: string;
+  sessionId: string;
+  message: string;
+  payload: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+export type TmuxRunner = {
+  run(file: string, args: string[], options?: { cwd?: string }): Promise<{ stdout: string; stderr: string }>;
+};
+
+export type CodexSessionManagerOptions = {
+  runner: TmuxRunner;
+  now?: () => string;
+  idFactory?: () => string;
+  maxBufferedEvents?: number;
+  onEvent?: (event: CodexSessionEvent) => void;
+};
+
+export type StartCodexSessionInput = {
+  worldId: string;
+  issueId: string;
+  issueRoot: string;
+  worktreePaths: string[];
+  cwd?: string;
+  command?: string[];
+  sessionId?: string;
+};
+
+export class CodexSessionManager {
+  private readonly sessions = new Map<string, CodexSessionRecord>();
+  private readonly capturedOutput = new Map<string, string>();
+  private readonly now: () => string;
+  private readonly idFactory: () => string;
+  private readonly maxBufferedEvents: number;
+
+  constructor(private readonly options: CodexSessionManagerOptions) {
+    this.now = options.now ?? nowIso;
+    this.idFactory = options.idFactory ?? (() => randomUUID());
+    this.maxBufferedEvents = options.maxBufferedEvents ?? 200;
+  }
+
+  async start(input: StartCodexSessionInput): Promise<CodexSessionRecord> {
+    if (input.worktreePaths.length === 0) {
+      throw new Error("Cannot start an Issue-scope Codex session before the Issue has at least one worktree repo.");
+    }
+    const cwd = normalizePath(input.cwd ?? input.worktreePaths[0] ?? input.issueRoot);
+    const issueRoot = normalizePath(input.issueRoot);
+    if (!isPathInside(cwd, issueRoot)) {
+      throw new Error(`Codex session cwd ${cwd} is outside Issue root ${issueRoot}.`);
+    }
+    const knownScope = input.worktreePaths.some((worktreePath) => isPathInside(cwd, normalizePath(worktreePath))) || cwd === issueRoot;
+    if (!knownScope) {
+      throw new Error("Codex session cwd must be the Issue root or a directory inside one of the Issue worktrees.");
+    }
+
+    const sessionId = input.sessionId ?? `session_${this.idFactory()}`;
+    const tmuxSessionName = buildTmuxSessionName(input.worldId, input.issueId, sessionId);
+    const command = input.command ?? ["codex"];
+    if (command.length === 0 || !command[0]) {
+      throw new Error("Cannot start a Codex session with an empty command.");
+    }
+    await this.options.runner.run("tmux", ["new-session", "-d", "-s", tmuxSessionName, "-c", cwd, shellCommand(command)], { cwd });
+    const startedAt = this.now();
+    const record: CodexSessionRecord = {
+      id: sessionId,
+      worldId: input.worldId,
+      issueId: input.issueId,
+      tmuxSessionName,
+      tmuxTarget: `${tmuxSessionName}:0.0`,
+      cwd,
+      command,
+      status: "live",
+      startedAt,
+      endedAt: null,
+      outputBuffer: []
+    };
+    this.sessions.set(sessionId, record);
+    this.emit(record, "session.started", `Started tmux Codex session ${sessionId}.`, {
+      tmuxSessionName,
+      cwd,
+      command
+    });
+    return cloneSession(record);
+  }
+
+  async sendInput(sessionId: string, input: string): Promise<CodexSessionRecord> {
+    const session = this.requireSession(sessionId);
+    await this.options.runner.run("tmux", ["send-keys", "-t", session.tmuxTarget, input, "Enter"]);
+    this.emit(session, "session.status", "Sent input to tmux Codex session.", { inputLength: input.length });
+    return cloneSession(session);
+  }
+
+  async captureOutput(sessionId: string): Promise<string> {
+    const session = this.requireSession(sessionId);
+    const { stdout } = await this.options.runner.run("tmux", ["capture-pane", "-p", "-t", session.tmuxTarget]);
+    const previous = this.capturedOutput.get(sessionId) ?? "";
+    const nextChunk = stdout.startsWith(previous) ? stdout.slice(previous.length) : stdout;
+    this.capturedOutput.set(sessionId, stdout);
+    if (nextChunk.length > 0) {
+      this.appendOutput(session, nextChunk);
+      this.emit(session, "session.output", nextChunk, { bufferedLines: session.outputBuffer.length });
+    }
+    return nextChunk;
+  }
+
+  async interrupt(sessionId: string): Promise<CodexSessionRecord> {
+    const session = this.requireSession(sessionId);
+    await this.options.runner.run("tmux", ["send-keys", "-t", session.tmuxTarget, "C-c"]);
+    this.mark(session, "interrupted", "Interrupted tmux Codex session.");
+    return cloneSession(session);
+  }
+
+  async terminate(sessionId: string): Promise<CodexSessionRecord> {
+    const session = this.requireSession(sessionId);
+    await this.options.runner.run("tmux", ["kill-session", "-t", session.tmuxSessionName]);
+    this.mark(session, "terminated", "Terminated tmux Codex session.");
+    return cloneSession(session);
+  }
+
+  list(): CodexSessionRecord[] {
+    return [...this.sessions.values()].map((session) => cloneSession(session));
+  }
+
+  get(sessionId: string): CodexSessionRecord | null {
+    const session = this.sessions.get(sessionId);
+    return session ? cloneSession(session) : null;
+  }
+
+  recover(records: CodexSessionRecord[]): void {
+    for (const record of records) {
+      this.sessions.set(record.id, cloneSession({ ...record, status: record.status === "live" ? "unknown" : record.status }));
+      this.capturedOutput.set(record.id, record.outputBuffer.join(""));
+    }
+  }
+
+  private requireSession(sessionId: string): CodexSessionRecord {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Unknown Codex session: ${sessionId}`);
+    }
+    return session;
+  }
+
+  private mark(session: CodexSessionRecord, status: CodexSessionStatus, message: string): void {
+    session.status = status;
+    session.endedAt = this.now();
+    this.emit(session, "session.status", message, { status });
+  }
+
+  private appendOutput(session: CodexSessionRecord, chunk: string): void {
+    session.outputBuffer.push(chunk);
+    if (session.outputBuffer.length > this.maxBufferedEvents) {
+      session.outputBuffer.splice(0, session.outputBuffer.length - this.maxBufferedEvents);
+    }
+  }
+
+  private emit(session: CodexSessionRecord, type: CodexSessionEvent["type"], message: string, payload: Record<string, unknown> | null): void {
+    this.options.onEvent?.({
+      id: `event_${this.idFactory()}`,
+      type,
+      worldId: session.worldId,
+      issueId: session.issueId,
+      sessionId: session.id,
+      message,
+      payload,
+      createdAt: this.now()
+    });
+  }
+}
+
+function buildTmuxSessionName(worldId: string, issueId: string, sessionId: string): string {
+  return ["cg", worldId, issueId, sessionId].map((part) => part.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 48)).join("_");
+}
+
+function shellCommand(command: string[]): string {
+  return command.map((part) => `'${part.replace(/'/g, `'\\''`)}'`).join(" ");
+}
+
+function cloneSession(session: CodexSessionRecord): CodexSessionRecord {
+  return { ...session, command: [...session.command], outputBuffer: [...session.outputBuffer] };
+}
+
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, "/").replace(/\/+$/g, "") || "/";
+}
+
+function isPathInside(candidate: string, scope: string): boolean {
+  const normalizedCandidate = normalizePath(candidate);
+  const normalizedScope = normalizePath(scope);
+  return normalizedCandidate === normalizedScope || normalizedCandidate.startsWith(`${normalizedScope}/`);
+}
