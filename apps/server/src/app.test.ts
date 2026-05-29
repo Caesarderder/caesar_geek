@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +9,52 @@ import { appRouter, buildServer } from "./app.js";
 const execFileAsync = promisify(execFile);
 
 describe("server acceptance path", () => {
+  it("scans the local repo root and creates an issue with selected repos under the issue root", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cg-home-"));
+    const repoRoot = await mkdtemp(path.join(tmpdir(), "cg-repos-"));
+    const issueRoot = await mkdtemp(path.join(tmpdir(), "cg-issues-"));
+    process.env.CAESAR_GEEK_HOME = home;
+    process.env.CAESAR_REPO_ROOT = repoRoot;
+    process.env.CAESAR_ISSUE_ROOT = issueRoot;
+    const { fastify, ctx } = await buildServer();
+    const caller = appRouter.createCaller(ctx);
+
+    const sourceRepo = path.join(repoRoot, "fixture");
+    await createFixtureRepo(sourceRepo);
+    const sourceRepoRealPath = await realpath(sourceRepo);
+    const scannedRepos = await caller.repos.scan();
+    expect(scannedRepos).toEqual([expect.objectContaining({ name: "fixture", path: sourceRepoRealPath })]);
+
+    const created = await caller.issues.create({ title: "Fix selected repo", repoPaths: [sourceRepoRealPath] });
+    expect(created.record.path).toContain(issueRoot);
+    expect(created.repos).toEqual([expect.objectContaining({ name: "fixture", destinationPath: path.join(created.record.path, "repos", "fixture") })]);
+
+    const recovery = await caller.tasks.recovery();
+    expect(recovery.awesome.path).toBe(created.record.path);
+    expect(recovery.ultraworks[0]?.destinationPath).toContain(path.join("repos", "fixture"));
+
+    const repoAgent = await caller.tasks.create({
+      title: "Repo scoped agent",
+      prompt: "Inspect only this repo",
+      command: [process.execPath, "-e", "console.log(process.cwd())"],
+      ultraworkIds: [recovery.ultraworks[0]!.id],
+      cwd: recovery.ultraworks[0]!.destinationPath,
+      launch: false
+    });
+    expect(repoAgent.task?.cwd).toBe(recovery.ultraworks[0]!.destinationPath);
+    await expect(
+      caller.tasks.create({
+        title: "Escaped agent",
+        prompt: "Reject outside cwd",
+        command: [process.execPath, "-e", "console.log(process.cwd())"],
+        ultraworkIds: [recovery.ultraworks[0]!.id],
+        cwd: repoRoot,
+        launch: false
+      })
+    ).rejects.toThrow("Agent cwd must be the active issue path");
+    await fastify.close();
+  });
+
   it("persists awesome, clone-first ultrawork, task associations, takeover, and recovery state", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "cg-home-"));
     process.env.CAESAR_GEEK_HOME = home;
@@ -224,6 +270,15 @@ describe("server acceptance path", () => {
     await restarted.fastify.close();
   });
 });
+
+async function createFixtureRepo(repoPath: string): Promise<void> {
+  await execFileAsync("git", ["init", "--initial-branch=main", repoPath]);
+  await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: repoPath });
+  await execFileAsync("git", ["config", "user.name", "Test"], { cwd: repoPath });
+  await writeFile(path.join(repoPath, "README.md"), "hello\n");
+  await execFileAsync("git", ["add", "README.md"], { cwd: repoPath });
+  await execFileAsync("git", ["commit", "-m", "init"], { cwd: repoPath });
+}
 
 async function waitForTaskStatus(
   caller: ReturnType<typeof appRouter.createCaller>,

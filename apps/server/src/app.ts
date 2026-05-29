@@ -19,7 +19,9 @@ import {
   cloneUltrawork,
   createAwesomeLayout,
   defaultWorkspacePaths,
-  detectAwesomeAvailability
+  detectAwesomeAvailability,
+  scanGitRepositories,
+  slugify
 } from "@caesar-geek/workspace";
 import { AwesomeStore, RegistryStore } from "./db/sqlite.js";
 
@@ -33,6 +35,8 @@ export type AppContext = {
   registry: RegistryStore;
   activeAwesome: ActiveAwesome | null;
   events: Set<(event: TaskEvent) => void>;
+  localRepoRootPath: string;
+  issueRootPath: string;
 };
 
 const t = initTRPC.context<AppContext>().create();
@@ -79,6 +83,42 @@ function publishEvent(store: AwesomeStore, ctx: AppContext, event: TaskEvent): v
 }
 
 export const appRouter = t.router({
+  repos: t.router({
+    scan: publicProcedure.query(async ({ ctx }) => scanGitRepositories({ rootPath: ctx.localRepoRootPath, maxDepth: 2 }))
+  }),
+  issues: t.router({
+    create: publicProcedure
+      .input(z.object({ title: z.string().min(1), repoPaths: z.array(z.string().min(1)).min(1) }))
+      .mutation(async ({ ctx, input }) => {
+        const issuePath = path.join(ctx.issueRootPath, `${slugify(input.title)}-${randomUUID().slice(0, 8)}`);
+        const awesome = await createAwesomeLayout({ name: input.title, rootPath: issuePath });
+        const store = await AwesomeStore.open(awesome.path);
+        store.saveAwesome(awesome);
+        const importedRepos = [];
+        for (const repoPath of input.repoPaths) {
+          const ultrawork = await cloneUltrawork({
+            awesome,
+            sourcePath: repoPath,
+            targetDir: "repos"
+          });
+          store.saveUltrawork(ultrawork);
+          importedRepos.push(ultrawork);
+        }
+        const record: RegistryRecord = {
+          id: awesome.id,
+          name: awesome.name,
+          slug: awesome.slug,
+          path: awesome.path,
+          createdAt: awesome.createdAt,
+          lastOpenedAt: nowIso(),
+          availability: "available"
+        };
+        ctx.registry.upsert(record);
+        const runtime = createRuntime(store, ctx);
+        setActiveAwesome(ctx, { awesome, store, runtime }, "issue create");
+        return { issue: awesome, repos: importedRepos, record };
+      })
+  }),
   awesomes: t.router({
     list: publicProcedure.query(async ({ ctx }) => {
       const records = await Promise.all(ctx.registry.list().map((record) => detectAwesomeAvailability(record)));
@@ -158,24 +198,31 @@ export const appRouter = t.router({
           prompt: z.string().min(1),
           command: z.array(z.string().min(1)).min(1).optional(),
           ultraworkIds: z.array(z.string()).default([]),
+          cwd: z.string().optional(),
           launch: z.boolean().default(true)
         })
       )
       .mutation(({ ctx, input }) => {
         const active = requireActive(ctx);
         const command = input.command ?? buildCodexExecCommand(input.prompt);
-        const policy = classifyHighRiskAction({ command, scopePath: active.awesome.path });
-        const validUltraworkIds = new Set(active.store.listUltraworks().map((ultrawork) => ultrawork.id));
+        const scopePath = input.cwd ?? active.awesome.path;
+        const policy = classifyHighRiskAction({ command, scopePath });
+        const ultraworks = active.store.listUltraworks();
+        const validUltraworkIds = new Set(ultraworks.map((ultrawork) => ultrawork.id));
         const unknownUltraworkIds = input.ultraworkIds.filter((id) => !validUltraworkIds.has(id));
         if (unknownUltraworkIds.length > 0) {
           throw new Error(`Unknown ultrawork ids for active awesome: ${unknownUltraworkIds.join(", ")}`);
+        }
+        const allowedCwds = new Set([active.awesome.path, ...ultraworks.map((ultrawork) => ultrawork.destinationPath)]);
+        if (!allowedCwds.has(scopePath)) {
+          throw new Error(`Agent cwd must be the active issue path or one of its selected repos: ${scopePath}`);
         }
         const task = active.runtime.createTaskDraft({
           awesomeId: active.awesome.id,
           title: input.title,
           prompt: input.prompt,
           command,
-          cwd: active.awesome.path
+          cwd: scopePath
         });
         if (!policy.allowed) {
           task.status = "queued";
@@ -363,7 +410,9 @@ export async function buildServer() {
   const ctx: AppContext = {
     registry: await RegistryStore.open(paths.registryDbPath),
     activeAwesome: null,
-    events: new Set()
+    events: new Set(),
+    localRepoRootPath: paths.localRepoRootPath,
+    issueRootPath: paths.issueRootPath
   };
   const fastify = Fastify({ logger: true });
   await fastify.register(cors, { origin: true });

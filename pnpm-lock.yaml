@@ -168,6 +168,12 @@ importers:
       '@caesar-geek/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime
+      '@caesar-geek/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@caesar-geek/workspace':
+        specifier: workspace:*
+        version: link:../workspace
     devDependencies:
       '@types/node':
         specifier: ^22.15.29

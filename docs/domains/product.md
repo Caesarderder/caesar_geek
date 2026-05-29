@@ -24,6 +24,8 @@ related:
 
 Caesar Geek 是面向本地仓库 AI 工作的 TypeScript control plane。目标是让 worker 执行可见、可持久化、可中断、可接管，并能通过本地 gateway 支撑前端恢复状态。
 
+当前核心产品入口是 Issue-first：界面优先扫描本机 `~/workspace/repos` 下的 git 仓库，让用户勾选 repo 后创建 Issue。创建出的 Issue 必须落在 `~/.caesar/issues` 下，并在 Issue 内保存用户选中的所有 repo。Issue 作用域和 Issue 内每个 repo 作用域都必须能一键创建 agent。
+
 ## 什么时候读
 
 - 判断 MVP 范围。
@@ -35,6 +37,7 @@ Caesar Geek 是面向本地仓库 AI 工作的 TypeScript control plane。目标
 - 维护本地单用户 MVP 的验收路径。
 - 保持公开领域词和核心流程稳定。
 - 约束第一版本不扩张到远程、多用户、IDE 替代或 provider marketplace。
+- 维护 Issue-first 仓库选择流程：扫描候选 repo、勾选 repo、创建 Issue、从 Issue 或 repo 创建 agent。
 
 ## 不是本层职责
 

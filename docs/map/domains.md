@@ -12,6 +12,8 @@ source_of_truth:
   - packages/shared/src/index.ts
   - packages/workspace/src/index.ts
   - packages/agent-runtime/src/index.ts
+  - packages/cloud-agent/src/index.ts
+  - docs/references/architecture/cloud-agent-codex-session-concepts.md
 validated_by:
   - manual-code-read
 tags:
@@ -23,6 +25,7 @@ related:
   - domain.workspace
   - domain.runtime
   - domain.shared
+  - reference.cloud-agent-codex-session-concepts
 ---
 
 # 领域索引
@@ -35,6 +38,7 @@ related:
 | `workspace` | KM:domain.workspace | awesome 布局、registry 路径、ultrawork clone、路径范围判断 | [wiki/packages](../wiki/packages/packages.md) |
 | `runtime` | KM:domain.runtime | geek task 草稿、进程启动、日志事件、接管/中断/终止 | [wiki/packages](../wiki/packages/packages.md) |
 | `shared` | KM:domain.shared | Zod schema、共享类型、高风险动作分类 | [file-ownership](../references/indexes/file-ownership.md) |
+| `cloud-agent` | KM:reference.cloud-agent-codex-session-concepts | outbound World runtime、Cloud Protocol handler、Gateway request/result bridge | [Cloud Agent Codex Session 概念](../references/architecture/cloud-agent-codex-session-concepts.md) |
 | `code` | KM:reference.wiki-index | wiki 和实现索引使用的代码检索领域 | [wiki/index](../wiki/index.md) |
 | `workflow` | KM:map.workflows | 知识地图和工程操作流程 | [workflows](workflows.md) |
 | `quality` | KM:quality.lint-rules | 类型检查、测试、文档检查、过期文档 | [docs-lint](../runbooks/docs-lint.md) |

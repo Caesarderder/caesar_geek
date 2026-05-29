@@ -7,6 +7,8 @@ owner: caesar-maintainers
 last_verified: 2026-05-26
 source_of_truth:
   - .omx/specs/deep-interview-local-ai-workspace-gateway.md
+  - ../.omx/specs/deep-interview-cloud-agent-codex-session-mvp.md
+  - docs/references/architecture/cloud-agent-codex-session-concepts.md
   - apps/web/src/main.tsx
   - packages/shared/src/index.ts
 validated_by:
@@ -16,6 +18,7 @@ tags:
 related:
   - map.domains
   - map.invariants
+  - reference.cloud-agent-codex-session-concepts
 ---
 
 # 术语表
@@ -33,6 +36,20 @@ related:
 | registry | gateway 级 known-awesome 索引，默认路径来自 `CAESAR_GEEK_HOME` 或用户 home 下 `.caesar-geek` |
 | takeover | operator 对运行中任务的接管事件，当前实现包含 claim、interrupt、terminate、follow_up |
 | recovery | 通过持久化记录恢复 awesome、ultrawork、task、事件和 last-known runtime 状态 |
+
+## Cloud Agent Codex Session 词
+
+| 术语 | 含义 |
+| --- | --- |
+| World | Cloud Agent MVP 中的本地执行世界；在 `caesar_geek` 中由 outbound World runtime 代表，不等同于旧本地 UI 的 `awesome` 持久实体 |
+| World runtime | `packages/cloud-agent` 中连接 Gateway、处理 Cloud Protocol request、回传 result/output 的本地 daemon |
+| Issue | Cloud Agent MVP 的工作容器，拥有 rootPath、worktreeIds 和 session scope；不等同于本地 UI 里的 geek task |
+| Repo | World 发现或导入的 git repo 记录；浏览器不能上传 credential |
+| Worktree | Issue 下的独立 git worktree，Codex session cwd 必须落在 Issue root 或已知 worktree scope 内 |
+| Agent | World 内启动的具体执行器，例如 Codex CLI；Mac mini 本身不是 Agent |
+| Session | tmux-backed Codex 长会话，由 `CodexSessionManager` 管理输入、输出、状态和 buffer |
+
+Cloud Agent 词和本地魔法世界 UI 词可以互相映射，但不能在 Cloud Protocol 字段里泄漏 `awesome/ultrawork/geek task` 等旧本地 UI 名称。
 
 ## 魔法世界 UI 词
 

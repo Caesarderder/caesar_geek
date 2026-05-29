@@ -4,9 +4,22 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { CodexSessionManager, type CodexSessionRecord, type TmuxRunner } from "@caesar-geek/agent-runtime";
+import {
+  cloudProtocolVersion,
+  parseCloudProtocolMessage as parseSharedCloudProtocolMessage,
+  type CloudMessageType,
+  type CloudProtocolMessage
+} from "@caesar-geek/shared";
+import {
+  createIssueWorktree,
+  createWorldIssueLayout,
+  importGitRepository,
+  listGitBranches,
+  type WorldRepoRecord
+} from "@caesar-geek/workspace";
 
 const execFileAsync = promisify(execFile);
-const protocolVersion = 1 as const;
+const protocolVersion = cloudProtocolVersion;
 
 export type AgentCommand = {
   version: typeof protocolVersion;
@@ -27,47 +40,6 @@ export type AgentResult = {
   exitCode: number | null;
 };
 
-export type CloudMessageType =
-  | "world.status"
-  | "world.error"
-  | "world.audit"
-  | "issue.list.request"
-  | "issue.list.result"
-  | "issue.create.request"
-  | "issue.create.result"
-  | "issue.select.request"
-  | "repo.scan.request"
-  | "repo.scan.result"
-  | "repo.import.request"
-  | "repo.import.result"
-  | "branch.list.request"
-  | "branch.list.result"
-  | "worktree.create.request"
-  | "worktree.create.result"
-  | "session.start.request"
-  | "session.started"
-  | "session.list.request"
-  | "session.list.result"
-  | "session.select.request"
-  | "session.input.request"
-  | "session.output"
-  | "session.status"
-  | "session.interrupt.request"
-  | "session.terminate.request";
-
-export type CloudProtocolMessage = {
-  version: typeof protocolVersion;
-  type: CloudMessageType;
-  requestId?: string;
-  worldId?: string;
-  issueId?: string;
-  repoId?: string;
-  worktreeId?: string;
-  sessionId?: string;
-  createdAt?: string;
-  payload?: Record<string, unknown>;
-};
-
 export type WorldRuntimeHandler = {
   status(): CloudProtocolMessage;
   handle(message: CloudProtocolMessage): Promise<CloudProtocolMessage[]>;
@@ -82,11 +54,14 @@ export type CloudAgentOptions = {
   WebSocketImpl?: typeof WebSocket;
   worldRuntime?: WorldRuntimeHandler;
   log?: Pick<Console, "log" | "error">;
+  reconnectDelayMs?: number;
 };
 
 export class CloudAgent {
   private socket: WebSocket | null = null;
   private readonly worldRuntime: WorldRuntimeHandler;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private closedByUser = false;
 
   constructor(private readonly options: CloudAgentOptions) {
     const worldId = options.worldId ?? options.agentId ?? "mac-mini";
@@ -94,6 +69,11 @@ export class CloudAgent {
   }
 
   connect(): WebSocket {
+    this.closedByUser = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     const WebSocketCtor = this.options.WebSocketImpl ?? WebSocket;
     const worldId = this.options.worldId ?? this.options.agentId ?? "mac-mini";
     const url = normalizeGatewayAgentUrl(this.options.gatewayUrl, this.options.token, worldId);
@@ -107,6 +87,9 @@ export class CloudAgent {
     });
     this.socket.addEventListener("error", (event) => {
       this.options.log?.error("Cloud World runtime websocket error", event);
+    });
+    this.socket.addEventListener("close", () => {
+      if (!this.closedByUser) this.scheduleReconnect();
     });
     return this.socket;
   }
@@ -130,7 +113,26 @@ export class CloudAgent {
   }
 
   close(): void {
+    this.closedByUser = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.socket?.close();
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) return;
+    const delayMs = this.options.reconnectDelayMs ?? 3_000;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      try {
+        this.connect();
+      } catch (error) {
+        this.options.log?.error("Failed to reconnect Caesar World runtime", error);
+        this.scheduleReconnect();
+      }
+    }, delayMs);
   }
 }
 
@@ -138,7 +140,7 @@ export function normalizeGatewayAgentUrl(gatewayUrl: string, token: string, agen
   const url = new URL(gatewayUrl);
   if (url.protocol === "http:") url.protocol = "ws:";
   if (url.protocol === "https:") url.protocol = "wss:";
-  url.pathname = "/agent";
+  url.pathname = "/world";
   url.searchParams.set("token", token);
   url.searchParams.set("agentId", agentId);
   url.searchParams.set("worldId", agentId);
@@ -195,9 +197,22 @@ export function parseAllowedProbe(input: string): { allowed: true; file: string;
   return { allowed: false, reason: "Only pwd, whoami, and codex probe are allowed in the MVP Mac Agent." };
 }
 
-export type WorldIssue = { id: string; title: string; rootPath: string; worktreeIds: string[] };
-export type WorldRepo = { id: string; name: string; gitUrl: string; branches: string[] };
+export type WorldIssue = { id: string; title: string; rootPath: string; worktreesPath: string; worktreeIds: string[] };
+export type WorldRepo = WorldRepoRecord & { gitUrl: string; branches: string[] };
 export type WorldWorktree = { id: string; issueId: string; repoId: string; branch: string; path: string };
+type WorldWorkspaceOps = {
+  createIssue: typeof createWorldIssueLayout;
+  importRepo: typeof importGitRepository;
+  listBranches: typeof listGitBranches;
+  createWorktree: typeof createIssueWorktree;
+};
+
+const defaultWorkspaceOps: WorldWorkspaceOps = {
+  createIssue: createWorldIssueLayout,
+  importRepo: importGitRepository,
+  listBranches: listGitBranches,
+  createWorktree: createIssueWorktree
+};
 
 export class InMemoryWorldRuntime implements WorldRuntimeHandler {
   private readonly issues = new Map<string, WorldIssue>();
@@ -206,7 +221,7 @@ export class InMemoryWorldRuntime implements WorldRuntimeHandler {
   private readonly sessionManager: CodexSessionManager;
   private selectedIssueId: string | null = null;
 
-  constructor(private readonly options: { worldId: string; workspaceRoot?: string; runner?: TmuxRunner; sessionManager?: CodexSessionManager }) {
+  constructor(private readonly options: { worldId: string; workspaceRoot?: string; runner?: TmuxRunner; sessionManager?: CodexSessionManager; workspaceOps?: Partial<WorldWorkspaceOps> }) {
     const runner = options.runner ?? { run: (file, args, runOptions) => execFileAsync(file, args, { cwd: runOptions?.cwd }) };
     this.sessionManager = options.sessionManager ?? new CodexSessionManager({ runner });
   }
@@ -230,7 +245,7 @@ export class InMemoryWorldRuntime implements WorldRuntimeHandler {
       case "issue.list.request":
         return [this.reply(message, "issue.list.result", { issues: [...this.issues.values()] })];
       case "issue.create.request":
-        return [this.createIssue(message)];
+        return [await this.createIssue(message)];
       case "issue.select.request":
         this.requireIssue(message.issueId);
         this.selectedIssueId = message.issueId ?? null;
@@ -238,11 +253,11 @@ export class InMemoryWorldRuntime implements WorldRuntimeHandler {
       case "repo.scan.request":
         return [this.reply(message, "repo.scan.result", { repos: [...this.repos.values()] })];
       case "repo.import.request":
-        return [this.importRepo(message)];
+        return [await this.importRepo(message)];
       case "branch.list.request":
         return [this.reply(message, "branch.list.result", { branches: this.requireRepo(message.repoId).branches })];
       case "worktree.create.request":
-        return [this.createWorktree(message)];
+        return [await this.createWorktree(message)];
       case "session.start.request":
         return [this.reply(message, "session.started", { session: await this.startSession(message) })];
       case "session.list.request":
@@ -250,8 +265,8 @@ export class InMemoryWorldRuntime implements WorldRuntimeHandler {
       case "session.select.request":
         return [this.reply(message, "session.status", { session: this.requireSession(message.sessionId) })];
       case "session.input.request":
-        await this.sessionManager.sendInput(required(message.sessionId, "sessionId"), String(message.payload?.input ?? ""));
-        return [this.reply(message, "session.status", { session: this.requireSession(message.sessionId), inputAccepted: true })];
+        await this.sessionManager.sendInput(required(message.sessionId, "sessionId"), readSessionInput(message));
+        return this.captureSessionInputResult(message);
       case "session.interrupt.request":
         return [this.reply(message, "session.status", { session: await this.sessionManager.interrupt(required(message.sessionId, "sessionId")) })];
       case "session.terminate.request":
@@ -264,38 +279,62 @@ export class InMemoryWorldRuntime implements WorldRuntimeHandler {
     }
   }
 
-  private createIssue(message: CloudProtocolMessage): CloudProtocolMessage {
-    const id = String(message.payload?.issueId ?? `issue_${randomUUID()}`);
-    const title = String(message.payload?.title ?? "Untitled Issue");
-    const rootPath = String(message.payload?.rootPath ?? path.join(this.options.workspaceRoot ?? path.join(tmpdir(), "caesar-geek-world"), "issues", id));
-    const issue: WorldIssue = { id, title, rootPath, worktreeIds: [] };
-    this.issues.set(id, issue);
-    return this.reply(message, "issue.create.result", { issue });
+  private async createIssue(message: CloudProtocolMessage): Promise<CloudProtocolMessage> {
+    return this.reply(message, "issue.create.result", {
+      issue: await this.createIssueRecord(message)
+    });
   }
 
-  private importRepo(message: CloudProtocolMessage): CloudProtocolMessage {
+  private async createIssueRecord(message: CloudProtocolMessage): Promise<WorldIssue> {
+    const id = String(message.payload?.issueId ?? `issue_${randomUUID()}`);
+    const title = String(message.payload?.title ?? "Untitled Issue");
+    const issue = await this.workspaceOps().createIssue({
+      worldRootPath: this.worldRootPath(),
+      title,
+      id
+    });
+    const record: WorldIssue = { id: issue.id, title: issue.title, rootPath: issue.path, worktreesPath: issue.worktreesPath, worktreeIds: [] };
+    this.issues.set(id, record);
+    return record;
+  }
+
+  private async importRepo(message: CloudProtocolMessage): Promise<CloudProtocolMessage> {
     const gitUrl = String(message.payload?.gitUrl ?? "");
     if (!gitUrl || hasUrlCredentials(gitUrl) || containsCredentialKey(message.payload)) {
       return createWorldError(message, "A credential-free gitUrl is required.", this.options.worldId);
     }
-    const id = String(message.payload?.repoId ?? `repo_${randomUUID()}`);
-    const name = String(message.payload?.name ?? (path.basename(gitUrl).replace(/\.git$/i, "") || id));
-    const branch = String(message.payload?.ref ?? "main");
-    const repo: WorldRepo = { id, name, gitUrl, branches: [branch] };
-    this.repos.set(id, repo);
+    const imported = await this.workspaceOps().importRepo({
+      worldRootPath: this.worldRootPath(),
+      gitUrl,
+      ...(typeof message.payload?.ref === "string" && message.payload.ref ? { ref: message.payload.ref } : {}),
+      ...(typeof message.payload?.name === "string" && message.payload.name ? { name: message.payload.name } : {})
+    });
+    const branches = await this.workspaceOps().listBranches({ repoPath: imported.path });
+    const repo: WorldRepo = { ...imported, gitUrl, branches };
+    this.repos.set(repo.id, repo);
     return this.reply(message, "repo.import.result", { repo });
   }
 
-  private createWorktree(message: CloudProtocolMessage): CloudProtocolMessage {
+  private async createWorktree(message: CloudProtocolMessage): Promise<CloudProtocolMessage> {
     const issue = this.requireIssue(message.issueId);
     const repo = this.requireRepo(message.repoId);
     const branch = String(message.payload?.branch ?? repo.branches[0] ?? "main");
     const id = String(message.payload?.worktreeId ?? `worktree_${randomUUID()}`);
-    const worktreePath = path.join(issue.rootPath, "worktrees", `${repo.name}-${branch}`.replace(/[^A-Za-z0-9_.-]/g, "-"));
-    const worktree: WorldWorktree = { id, issueId: issue.id, repoId: repo.id, branch, path: worktreePath };
+    const created = await this.workspaceOps().createWorktree({ issue, repo, branch, id });
+    const worktree: WorldWorktree = { id: created.id, issueId: created.issueId, repoId: created.repoId, branch: created.branch, path: created.path };
     this.worktrees.set(id, worktree);
     issue.worktreeIds.push(id);
     return this.reply(message, "worktree.create.result", { worktree });
+  }
+
+  private async captureSessionInputResult(message: CloudProtocolMessage): Promise<CloudProtocolMessage[]> {
+    const session = this.requireSession(message.sessionId);
+    const output = await this.sessionManager.captureOutput(session.id);
+    const responses = [this.reply(message, "session.status", { session, inputAccepted: true })];
+    if (output.length > 0) {
+      responses.push(this.reply(message, "session.output", { text: output }));
+    }
+    return responses;
   }
 
   private async startSession(message: CloudProtocolMessage): Promise<CodexSessionRecord> {
@@ -305,14 +344,12 @@ export class InMemoryWorldRuntime implements WorldRuntimeHandler {
     if (!worktree || worktree.issueId !== issue.id) {
       throw new Error(`Unknown Issue worktree: ${requestedWorktreeId}`);
     }
-    const command = Array.isArray(message.payload?.command) ? message.payload.command.map(String) : ["codex"];
     return this.sessionManager.start({
       worldId: this.options.worldId,
       issueId: issue.id,
       issueRoot: issue.rootPath,
       worktreePaths: issue.worktreeIds.map((id) => this.worktrees.get(id)?.path).filter((value): value is string => Boolean(value)),
       cwd: typeof message.payload?.cwd === "string" ? message.payload.cwd : worktree.path,
-      command,
       ...(message.sessionId ? { sessionId: message.sessionId } : {})
     });
   }
@@ -333,6 +370,14 @@ export class InMemoryWorldRuntime implements WorldRuntimeHandler {
     const session = sessionId ? this.sessionManager.get(sessionId) : null;
     if (!session) throw new Error(`Unknown session: ${sessionId ?? "<missing>"}`);
     return session;
+  }
+
+  private worldRootPath(): string {
+    return this.options.workspaceRoot ?? path.join(tmpdir(), "caesar-geek-world", this.options.worldId);
+  }
+
+  private workspaceOps(): WorldWorkspaceOps {
+    return { ...defaultWorkspaceOps, ...this.options.workspaceOps };
   }
 
   private reply(request: CloudProtocolMessage, type: CloudMessageType, payload: Record<string, unknown>): CloudProtocolMessage {
@@ -362,11 +407,11 @@ export function parseCloudProtocolMessage(raw: unknown): CloudProtocolMessage | 
   } catch {
     return null;
   }
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as Partial<CloudProtocolMessage>;
-  if (candidate.version !== protocolVersion || typeof candidate.type !== "string" || !candidate.type.includes(".")) return null;
-  if (candidate.payload !== undefined && (!candidate.payload || typeof candidate.payload !== "object" || Array.isArray(candidate.payload))) return null;
-  return candidate as CloudProtocolMessage;
+  try {
+    return parseSharedCloudProtocolMessage(value);
+  } catch {
+    return null;
+  }
 }
 
 function createWorldError(request: CloudProtocolMessage, reason: string, worldId: string): CloudProtocolMessage {
@@ -387,6 +432,11 @@ function createWorldError(request: CloudProtocolMessage, reason: string, worldId
 function required(value: string | undefined, name: string): string {
   if (!value) throw new Error(`${name} is required.`);
   return value;
+}
+
+function readSessionInput(message: CloudProtocolMessage): string {
+  const input = message.payload?.input ?? message.payload?.text;
+  return typeof input === "string" ? input : "";
 }
 
 function parseCommand(raw: unknown): AgentCommand | null {

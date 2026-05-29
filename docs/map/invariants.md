@@ -31,7 +31,10 @@ related:
 - `awesome`、`ultrawork`、`geek` 是公开领域词，不能随意改名。
 - 世界观映射必须保持：`awesome` 是 world，`ultrawork` 是 race，`geek`/agent 是由 race 启动的 role，race 之间的协作编排称为 bond。
 - 第一版本是本地单用户，不包含认证、远程部署、多用户权限组或项目管理套件。
-- `geek` 任务应从所选 `awesome` 目录启动，而不是原始 repo 或单个 ultrawork 目录。
+- 可选本地 repo 的默认来源是 `~/workspace/repos`；界面应扫描并列出候选项，避免要求用户反复手输路径。
+- Issue 的默认创建根目录是 `~/.caesar/issues`；创建 Issue 时必须把用户选中的所有 repo 放进该 Issue。
+- Agent 创建入口必须同时支持 Issue 作用域和 Issue 内单个 repo 作用域。
+- Issue-level `geek` 任务应从所选 `awesome`/Issue 目录启动；repo-level agent 只能从该 Issue 已登记 repo 的目录启动，不能从原始 repo 目录启动。
 - `ultrawork` 必须保持 git 关系；普通目录复制或 symlink 不满足当前规格。
 - 任务持久化是基础流程，不能只依赖 live process 状态。
 

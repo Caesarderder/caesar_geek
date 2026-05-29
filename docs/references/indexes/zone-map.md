@@ -10,6 +10,7 @@ source_of_truth:
   - packages
   - .omx/plans/local-ai-workspace-gateway-plan.md
   - docs/references/architecture/local-agent-core-rules.md
+  - docs/references/architecture/cloud-agent-codex-session-concepts.md
 validated_by:
   - manual-code-read
   - manual-requirements-review
@@ -20,6 +21,7 @@ related:
   - reference.file-ownership
   - reference.architecture-overview
   - reference.local-agent-core-rules
+  - reference.cloud-agent-codex-session-concepts
 ---
 
 # 区域地图
@@ -37,7 +39,9 @@ related:
 | `packages/shared` | 跨包 schema/type/policy | 所有 app/package 的类型兼容性 |
 | `packages/workspace` | 本地路径和 git workspace 操作 | 文件系统安全边界、ultrawork clone |
 | `packages/agent-runtime` | geek process runtime | task 状态机、日志、takeover、shutdown |
-| `未来 Agent daemon` | Mac mini 本地 Gateway 连接、Repo 登记、worktree 创建、Codex 长会话 | WSS 协议、tmux/PTY、worktree lifecycle |
+| `packages/cloud-agent` | outbound World runtime 和 Gateway Cloud Protocol handler | World status、Issue/repo/worktree/session request/result、Gateway 连接 |
+| `packages/agent-runtime` Cloud path | tmux-backed Codex Session Manager | session start/input/output/list/interrupt/terminate、cwd scope、output buffer |
+| `未来持久化 World registry` | Mac mini 本地 Repo/Issue/Session 持久状态 | World workspace、session recovery、Gateway reconnect |
 | `.omx` | 规划、访谈、上下文、运行状态 | 只作规格和计划来源，不替代当前实现 |
 | `docs` | 知识地图 | 工作流、领域、wiki、质量检查 |
 
@@ -45,6 +49,7 @@ related:
 
 - `CODE:apps`
 - `CODE:packages`
+- `CODE:packages/cloud-agent/src/index.ts`
 - `CODE:.omx`
 - `CODE:docs`
 

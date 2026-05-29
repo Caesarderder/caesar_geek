@@ -9,6 +9,7 @@ source_of_truth:
   - user-interview-2026-05-29
   - README.md
   - packages/agent-runtime/src/index.ts
+  - docs/references/architecture/cloud-agent-codex-session-concepts.md
   - https://git-scm.com/docs/git-worktree
 validated_by:
   - manual-requirements-review
@@ -22,6 +23,7 @@ related:
   - map.invariants
   - domain.runtime
   - domain.workspace
+  - reference.cloud-agent-codex-session-concepts
 ---
 
 # 本地 Agent 核心规则
@@ -34,6 +36,7 @@ related:
 
 - 用户计划将公网 Gateway 放在独立仓库 `../caesar_gateway`，部署到阿里云 ECS `47.93.141.241`，域名为 `geekcaesar.com`。
 - `caesar_geek` 负责 Mac mini 本地执行面：连接 Gateway、登记本地 Git repo、创建 git worktree、启动和管理多个持续 Codex 会话。
+- Codex Session MVP 的产品语言以 World/Issue/repo/worktree/Agent/session 为准：本地 daemon 代表 World runtime，Agent 指 World 内启动的 Codex 等执行器。
 - 网页和手机不直接访问 Mac mini；Mac mini Agent 主动通过 WSS 连接 Gateway。
 - 每个 Codex Session 必须运行在独立 git worktree 中，不能直接在原始 repo 目录中开发。
 - worktree 应创建在固定根目录，例如 `~/.caesar-geek/worktrees/<repo>/<session-id>`。
@@ -82,3 +85,4 @@ Gateway 下发 createSession
 - KM:decision.0002-gateway-agent-split
 - KM:domain.runtime
 - KM:domain.workspace
+- KM:reference.cloud-agent-codex-session-concepts

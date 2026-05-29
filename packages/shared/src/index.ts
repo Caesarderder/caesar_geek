@@ -392,6 +392,33 @@ export const cloudProtocolMessageSchema = cloudProtocolMessageBaseSchema.superRe
       context.addIssue({ code: "custom", path: ["payload", "gitUrl"], message: "gitUrl must not contain credentials." });
     }
   }
+  if (message.type === "session.start.request") {
+    const payload = message.payload ?? {};
+    const allowed = new Set(["cwd"]);
+    for (const key of Object.keys(payload)) {
+      if (!allowed.has(key)) {
+        context.addIssue({ code: "custom", path: ["payload", key], message: `Unsupported session start field: ${key}.` });
+      }
+    }
+    if (payload.cwd !== undefined && typeof payload.cwd !== "string") {
+      context.addIssue({ code: "custom", path: ["payload", "cwd"], message: "cwd must be a string when provided." });
+    }
+  }
+  if (message.type === "worktree.create.request") {
+    const payload = message.payload ?? {};
+    const allowed = new Set(["branch", "worktreeId"]);
+    for (const key of Object.keys(payload)) {
+      if (!allowed.has(key)) {
+        context.addIssue({ code: "custom", path: ["payload", key], message: `Unsupported worktree create field: ${key}.` });
+      }
+    }
+    if (payload.branch !== undefined && typeof payload.branch !== "string") {
+      context.addIssue({ code: "custom", path: ["payload", "branch"], message: "branch must be a string when provided." });
+    }
+    if (payload.worktreeId !== undefined && typeof payload.worktreeId !== "string") {
+      context.addIssue({ code: "custom", path: ["payload", "worktreeId"], message: "worktreeId must be a string when provided." });
+    }
+  }
 });
 
 export type CloudMessageType = z.infer<typeof cloudMessageTypeSchema>;

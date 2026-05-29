@@ -67,4 +67,36 @@ describe("cloud protocol schemas", () => {
     expect(() => parseCloudProtocolMessage({ ...validImportRequest, payload: { gitUrl: "https://example.com/repo.git", token: "secret" } })).toThrow(/credentials|Unsupported/i);
     expect(() => parseCloudProtocolMessage({ ...validImportRequest, payload: { gitUrl: "git@example.com:org/repo.git" } })).not.toThrow();
   });
+
+  it("rejects browser-controlled session command payloads", () => {
+    const startRequest = {
+      version: cloudProtocolVersion,
+      type: "session.start.request",
+      requestId: "req_session",
+      worldId: "world_1",
+      issueId: "issue_1",
+      worktreeId: "worktree_1"
+    } as const;
+    expect(() => parseCloudProtocolMessage(startRequest)).not.toThrow();
+    expect(() => parseCloudProtocolMessage({ ...startRequest, payload: { cwd: "/tmp/worktree" } })).not.toThrow();
+    expect(() => parseCloudProtocolMessage({ ...startRequest, payload: { command: ["node", "-e", "console.log(process.cwd())"] } })).toThrow(
+      /session start field: command/i
+    );
+  });
+
+  it("allows branch selection for worktree creation without arbitrary payload fields", () => {
+    const worktreeRequest = {
+      version: cloudProtocolVersion,
+      type: "worktree.create.request",
+      requestId: "req_worktree",
+      worldId: "world_1",
+      issueId: "issue_1",
+      repoId: "repo_1",
+      payload: { branch: "codex/claude-plugin-adapter", worktreeId: "worktree_1" }
+    } as const;
+    expect(() => parseCloudProtocolMessage(worktreeRequest)).not.toThrow();
+    expect(() => parseCloudProtocolMessage({ ...worktreeRequest, payload: { branch: "main", command: ["sh"] } })).toThrow(
+      /worktree create field: command/i
+    );
+  });
 });

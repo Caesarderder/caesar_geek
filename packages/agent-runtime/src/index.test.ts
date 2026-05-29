@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { CodexSessionManager, type TmuxRunner } from "./index.js";
 
@@ -75,5 +78,54 @@ describe("CodexSessionManager", () => {
         cwd: "/tmp/escape"
       })
     ).rejects.toThrow("outside Issue root");
+    await expect(
+      manager.start({
+        worldId: "world",
+        issueId: "issue",
+        issueRoot: "/world/issues/issue",
+        worktreePaths: ["/world/issues/issue/worktrees/repo"],
+        cwd: "/world/issues/issue/worktrees/repo/../../../escape"
+      })
+    ).rejects.toThrow("outside Issue root");
+  });
+
+  it("resolves symlink cwd escapes before launching tmux", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "codex-session-scope-"));
+    const issueRoot = path.join(root, "issue");
+    const worktree = path.join(issueRoot, "worktrees", "repo");
+    const escape = path.join(root, "escape");
+    const linkedEscape = path.join(worktree, "linked-escape");
+    await mkdir(worktree, { recursive: true });
+    await mkdir(escape, { recursive: true });
+    await symlink(escape, linkedEscape);
+
+    const manager = new CodexSessionManager({ runner: createFakeRunner() });
+
+    try {
+      await expect(
+        manager.start({
+          worldId: "world",
+          issueId: "issue",
+          issueRoot,
+          worktreePaths: [worktree],
+          cwd: linkedEscape
+        })
+      ).rejects.toThrow("outside Issue root");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("only launches Codex allowlisted session commands", async () => {
+    const manager = new CodexSessionManager({ runner: createFakeRunner() });
+    await expect(
+      manager.start({
+        worldId: "world",
+        issueId: "issue",
+        issueRoot: "/world/issues/issue",
+        worktreePaths: ["/world/issues/issue/worktrees/repo"],
+        command: ["node", "-e", "console.log('escape')"]
+      })
+    ).rejects.toThrow("Codex sessions");
   });
 });

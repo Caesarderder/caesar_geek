@@ -26,6 +26,7 @@ describe("workspace service", () => {
     await expect(stat(path.join(root, ".caesar-geek", "tasks"))).resolves.toBeTruthy();
     await expect(stat(path.join(root, ".caesar-geek", "logs"))).resolves.toBeTruthy();
     await expect(stat(path.join(root, ".caesar-geek", "sessions"))).resolves.toBeTruthy();
+    await expect(stat(path.join(root, "repos"))).resolves.toBeTruthy();
     await expect(stat(path.join(root, "ultraworks"))).resolves.toBeTruthy();
     await expect(stat(path.join(root, "artifacts"))).resolves.toBeTruthy();
   });
@@ -74,6 +75,15 @@ describe("workspace service", () => {
     });
     expect(worktree.path).toContain(issue.worktreesPath);
     await expect(stat(path.join(worktree.path, "README.md"))).resolves.toBeTruthy();
+
+    const newBranchWorktree = await createIssueWorktree({
+      issue,
+      repo: repos[0]!,
+      branch: "codex/claude-plugin-adapter",
+      id: "worktree_new_branch"
+    });
+    expect(newBranchWorktree.branch).toBe("codex/claude-plugin-adapter");
+    await expect(stat(path.join(newBranchWorktree.path, "README.md"))).resolves.toBeTruthy();
   });
 
   it("imports git URLs without accepting browser-supplied credentials", async () => {

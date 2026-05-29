@@ -20,6 +20,8 @@
     "vitest": "^4.0.14"
   },
   "dependencies": {
-    "@caesar-geek/agent-runtime": "workspace:*"
+    "@caesar-geek/agent-runtime": "workspace:*",
+    "@caesar-geek/shared": "workspace:*",
+    "@caesar-geek/workspace": "workspace:*"
   }
 }

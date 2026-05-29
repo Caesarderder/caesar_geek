@@ -23,7 +23,7 @@ related:
 
 ## 目标
 
-维护本地 operator UI，展示和操作 awesome、ultrawork、geek task、takeover 与事件流。
+维护本地 operator UI，展示和操作 Issue、Issue repo、agent task、takeover 与事件流。内部仍兼容 awesome/ultrawork/geek task 数据模型，但首屏体验应尽量用扫描和选择替代路径输入。
 
 ## 什么时候读
 
@@ -38,6 +38,7 @@ related:
 - 创建 task 时默认只提交 prompt；不传 command 时由 gateway 生成 Codex CLI 命令。
 - 显示 persisted approval gate，让 operator 批准或拒绝高风险 task。
 - 首屏是可用控制台，不是营销 landing page。
+- 首屏应扫描 `~/workspace/repos` 并列出 repo 选项；用户勾选 repo 后创建 `~/.caesar/issues` 下的 Issue。
 
 ## 不是本层职责
 
@@ -51,6 +52,7 @@ related:
 - UI 操作必须经 gateway。
 - 任务、接管和事件显示应能通过恢复查询重新构建。
 - 安全审批状态必须来自 gateway persisted recovery，不只依赖前端临时 state。
+- Issue 和 repo 都必须有 agent 创建入口；repo agent 的 cwd 必须是 Issue 内已登记 repo 路径。
 
 ## 入口
 

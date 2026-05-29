@@ -11,6 +11,8 @@ source_of_truth:
   - .omx/specs/deep-interview-local-ai-workspace-gateway.md
   - .omx/plans/local-ai-workspace-gateway-plan.md
   - docs/references/architecture/local-agent-core-rules.md
+  - docs/references/architecture/cloud-agent-codex-session-concepts.md
+  - docs/runbooks/cloud-deployment.md
 validated_by:
   - manual-repo-read
   - manual-requirements-review
@@ -23,6 +25,8 @@ related:
   - map.workflows
   - map.domains
   - reference.local-agent-core-rules
+  - reference.cloud-agent-codex-session-concepts
+  - runbook.cloud-deployment
 ---
 
 # Caesar Geek 知识地图
@@ -37,6 +41,7 @@ related:
 4. [领域索引](map/domains.md)：确认任务归属和实现入口。
 5. [不变量](map/invariants.md)：确认不能破坏的产品和架构约束。
 6. [本地 Agent 核心规则](references/architecture/local-agent-core-rules.md)：确认与公网 Gateway 拆分后的本地执行边界。
+7. [Cloud Agent Codex Session 工程概念](references/architecture/cloud-agent-codex-session-concepts.md)：从根目录 `.omx` 规划理解 World/Issue/repo/worktree/Agent/session 模型。
 
 ## 目录分区
 
@@ -58,6 +63,7 @@ related:
 - 领域归属以 [领域索引](map/domains.md) 和 `docs/domains/` 为准。
 - 当前实现落点以 [文件归属](references/indexes/file-ownership.md) 和 [区域地图](references/indexes/zone-map.md) 为准。
 - 架构叙事以 [架构概览](references/architecture/architecture-overview.md) 和 [本地 Agent 核心规则](references/architecture/local-agent-core-rules.md) 为准，但具体文件仍以实现索引和代码为准。
+- Codex Session MVP 的本地执行模型以 [Cloud Agent Codex Session 工程概念](references/architecture/cloud-agent-codex-session-concepts.md) 为准。
 - 产品计划和未完成目标以 `.omx/specs/`、`.omx/plans/` 和 [ADR-0001](decisions/ADR-0001-knowledge-map-structure.md) 标记，不等同于当前实现。
 - 公网 Gateway 与本地 Agent 的仓库拆分以 [ADR-0002](decisions/ADR-0002-gateway-agent-split.md) 为准。
 
@@ -67,3 +73,4 @@ related:
 - 找代码：读 [代码定位工作流](workflows/code-locating.md) 和 [wiki 入口](wiki/index.md)。
 - 改代码或审查：先写 [impact map](workflows/impact-map.md)。
 - 维护文档：读 [知识地图维护工作流](workflows/knowledge-map-maintenance.md) 和 [docs lint runbook](runbooks/docs-lint.md)。
+- 云端部署：读 [Cloud Deployment Runbook](runbooks/cloud-deployment.md)。

@@ -1,5 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { realpath } from "node:fs/promises";
+import path from "node:path";
 import type { GeekTask, RuntimeSession, TakeoverEvent, TaskEvent } from "@caesar-geek/shared";
 import { nowIso } from "@caesar-geek/shared";
 
@@ -270,6 +272,7 @@ export type CodexSessionManagerOptions = {
   runner: TmuxRunner;
   now?: () => string;
   idFactory?: () => string;
+  pathResolver?: (targetPath: string) => Promise<string>;
   maxBufferedEvents?: number;
   onEvent?: (event: CodexSessionEvent) => void;
 };
@@ -289,11 +292,13 @@ export class CodexSessionManager {
   private readonly capturedOutput = new Map<string, string>();
   private readonly now: () => string;
   private readonly idFactory: () => string;
+  private readonly pathResolver: (targetPath: string) => Promise<string>;
   private readonly maxBufferedEvents: number;
 
   constructor(private readonly options: CodexSessionManagerOptions) {
     this.now = options.now ?? nowIso;
     this.idFactory = options.idFactory ?? (() => randomUUID());
+    this.pathResolver = options.pathResolver ?? resolveRealPath;
     this.maxBufferedEvents = options.maxBufferedEvents ?? 200;
   }
 
@@ -301,22 +306,20 @@ export class CodexSessionManager {
     if (input.worktreePaths.length === 0) {
       throw new Error("Cannot start an Issue-scope Codex session before the Issue has at least one worktree repo.");
     }
-    const cwd = normalizePath(input.cwd ?? input.worktreePaths[0] ?? input.issueRoot);
-    const issueRoot = normalizePath(input.issueRoot);
+    const cwd = await this.resolveScopePath(input.cwd ?? input.worktreePaths[0] ?? input.issueRoot);
+    const issueRoot = await this.resolveScopePath(input.issueRoot);
     if (!isPathInside(cwd, issueRoot)) {
       throw new Error(`Codex session cwd ${cwd} is outside Issue root ${issueRoot}.`);
     }
-    const knownScope = input.worktreePaths.some((worktreePath) => isPathInside(cwd, normalizePath(worktreePath))) || cwd === issueRoot;
+    const worktreePaths = await Promise.all(input.worktreePaths.map((worktreePath) => this.resolveScopePath(worktreePath)));
+    const knownScope = worktreePaths.some((worktreePath) => isPathInside(cwd, worktreePath)) || cwd === issueRoot;
     if (!knownScope) {
       throw new Error("Codex session cwd must be the Issue root or a directory inside one of the Issue worktrees.");
     }
 
     const sessionId = input.sessionId ?? `session_${this.idFactory()}`;
     const tmuxSessionName = buildTmuxSessionName(input.worldId, input.issueId, sessionId);
-    const command = input.command ?? ["codex"];
-    if (command.length === 0 || !command[0]) {
-      throw new Error("Cannot start a Codex session with an empty command.");
-    }
+    const command = normalizeCodexSessionCommand(input.command);
     await this.options.runner.run("tmux", ["new-session", "-d", "-s", tmuxSessionName, "-c", cwd, shellCommand(command)], { cwd });
     const startedAt = this.now();
     const record: CodexSessionRecord = {
@@ -424,6 +427,10 @@ export class CodexSessionManager {
       createdAt: this.now()
     });
   }
+
+  private async resolveScopePath(targetPath: string): Promise<string> {
+    return normalizePath(await this.pathResolver(targetPath));
+  }
 }
 
 function buildTmuxSessionName(worldId: string, issueId: string, sessionId: string): string {
@@ -438,8 +445,29 @@ function cloneSession(session: CodexSessionRecord): CodexSessionRecord {
   return { ...session, command: [...session.command], outputBuffer: [...session.outputBuffer] };
 }
 
+async function resolveRealPath(targetPath: string): Promise<string> {
+  const resolved = path.resolve(targetPath);
+  try {
+    return await realpath(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
+function normalizeCodexSessionCommand(command: string[] | undefined): string[] {
+  const normalized = command ?? ["codex"];
+  const [file, ...args] = normalized;
+  const allowed =
+    file === "codex" &&
+    (args.length === 0 || (args.length === 1 && args[0] === "--version") || (args.length === 1 && args[0] === "probe"));
+  if (!allowed) {
+    throw new Error("Codex sessions may only launch the server-side Codex command allowlist.");
+  }
+  return [file, ...args];
+}
+
 function normalizePath(value: string): string {
-  return value.replace(/\\/g, "/").replace(/\/+$/g, "") || "/";
+  return path.resolve(value).replace(/\\/g, "/").replace(/\/+$/g, "") || "/";
 }
 
 function isPathInside(candidate: string, scope: string): boolean {

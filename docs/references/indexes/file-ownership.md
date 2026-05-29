@@ -9,6 +9,7 @@ source_of_truth:
   - apps
   - packages
   - package.json
+  - docs/references/architecture/cloud-agent-codex-session-concepts.md
 validated_by:
   - manual-code-read
   - pnpm --filter @caesar-geek/server test
@@ -21,6 +22,7 @@ related:
   - reference.zone-map
   - wiki.apps
   - wiki.packages
+  - reference.cloud-agent-codex-session-concepts
 ---
 
 # 文件归属
@@ -44,9 +46,12 @@ related:
 | `CODE:apps/web/vite.config.ts` | frontend | Vite React、可覆盖 web 端口和 API proxy | manual-read |
 | `CODE:packages/shared/src/index.ts` | shared | Zod schema、types、policy classifier、Codex exec command builder、approval record contract | manual-read |
 | `CODE:packages/workspace/src/index.ts` | workspace | awesome layout、path scope、git clone ultrawork | manual-read |
-| `CODE:packages/agent-runtime/src/index.ts` | runtime | GeekRuntime、spawn、events、takeover、shutdown | manual-read |
+| `CODE:packages/agent-runtime/src/index.ts` | runtime | GeekRuntime、spawn、events、takeover、shutdown；Cloud path 中的 CodexSessionManager/tmux session scope | manual-read |
+| `CODE:packages/cloud-agent/src/index.ts` | cloud-agent | outbound World runtime、Cloud Protocol parser、Issue/repo/worktree/session handler | manual-read |
 | `CODE:.omx/specs/deep-interview-local-ai-workspace-gateway.md` | product | 需求规格和范围 | manual-read |
 | `CODE:.omx/plans/local-ai-workspace-gateway-plan.md` | product | 实施规划和验收标准 | manual-read |
+| `CODE:../.omx/specs/deep-interview-cloud-agent-codex-session-mvp.md` | product | Cloud Agent Codex Session MVP ontology 和验收标准 | manual-read |
+| `CODE:../.omx/plans/ralplan-cloud-agent-codex-session-mvp.md` | product | Cloud Agent Codex Session MVP 实施计划 | manual-read |
 
 ## 验证
 

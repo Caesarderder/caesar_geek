@@ -2,17 +2,24 @@ import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
 import {
   Activity,
+  Bot,
   BookOpen,
+  CheckCircle2,
+  ClipboardCheck,
   FolderGit2,
   GitBranchPlus,
+  Gauge,
   Hammer,
+  MessageSquareText,
   Octagon,
   Pause,
   Play,
   RefreshCcw,
+  Route,
   ShieldAlert,
   SquarePlus,
   UserCheck,
+  Workflow,
   X
 } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
@@ -21,6 +28,12 @@ import type { ApprovalRecord, GeekTask, RegistryRecord, TaskEvent, Ultrawork } f
 import "./styles.css";
 
 type TrpcClient = {
+  repos: {
+    scan: { query(): Promise<RepoCandidate[]> };
+  };
+  issues: {
+    create: { mutate(input: { title: string; repoPaths: string[] }): Promise<{ issue: unknown; repos: Ultrawork[]; record: RegistryRecord }> };
+  };
   awesomes: {
     list: { query(): Promise<RegistryRecord[]> };
     create: { mutate(input: { name: string; path: string }): Promise<{ awesome: unknown; record: RegistryRecord }> };
@@ -33,7 +46,7 @@ type TrpcClient = {
   };
   tasks: {
     recovery: { query(): Promise<RecoveryState> };
-    create: { mutate(input: { title: string; prompt: string; command?: string[]; ultraworkIds: string[]; launch: boolean }): Promise<{ task: GeekTask; policy: { allowed: boolean; reason: string }; approval: ApprovalRecord | null }> };
+    create: { mutate(input: { title: string; prompt: string; command?: string[]; ultraworkIds: string[]; cwd?: string; launch: boolean }): Promise<{ task: GeekTask; policy: { allowed: boolean; reason: string }; approval: ApprovalRecord | null }> };
     followUp: { mutate(input: { taskId: string; claimedBy: string; prompt: string; command: string[]; launch: boolean }): Promise<GeekTask> };
     claim: { mutate(input: { taskId: string; claimedBy: string; note?: string }): Promise<unknown> };
     interrupt: { mutate(input: { taskId: string }): Promise<{ interrupted: boolean }> };
@@ -56,6 +69,14 @@ type RecoveryState = {
   latestEvents: TaskEvent[];
 };
 
+type RepoCandidate = {
+  id: string;
+  name: string;
+  path: string;
+  defaultBranch: string | null;
+  headSha: string | null;
+};
+
 const trpc = createTRPCProxyClient({
   links: [httpBatchLink({ url: "/trpc" })]
 }) as unknown as TrpcClient;
@@ -75,6 +96,7 @@ function WorkspaceConsole() {
   const [eventLog, setEventLog] = useState<TaskEvent[]>([]);
   const [isCodexOpen, setIsCodexOpen] = useState(false);
   const awesomes = useQuery({ queryKey: ["awesomes"], queryFn: () => trpc.awesomes.list.query() });
+  const repoScan = useQuery({ queryKey: ["repos", "scan"], queryFn: () => trpc.repos.scan.query() });
   const recovery = useQuery({
     queryKey: ["recovery"],
     queryFn: () => trpc.tasks.recovery.query(),
@@ -92,6 +114,9 @@ function WorkspaceConsole() {
   }, [qc]);
 
   const events = useMemo(() => [...(recovery.data?.latestEvents ?? []), ...eventLog].slice(-120), [eventLog, recovery.data?.latestEvents]);
+  const tasks = recovery.data?.tasks ?? [];
+  const runningTasks = tasks.filter((task) => ["queued", "running"].includes(task.status)).length;
+  const needsOperator = tasks.filter((task) => ["created", "claimed", "interrupted", "failed", "orphaned"].includes(task.status)).length;
 
   return (
     <main className="shell">
@@ -102,24 +127,31 @@ function WorkspaceConsole() {
           </button>
           <div>
             <strong>Caesar Geek</strong>
-            <span>local-first fantasy work worlds</span>
+            <span>local issue agents</span>
           </div>
           <img className="brandCrest" src="/race-sigil.png" alt="" />
         </div>
-        <AwesomePanel awesomes={awesomes.data ?? []} refresh={() => void awesomes.refetch()} />
+        <IssuePanel
+          issues={awesomes.data ?? []}
+          repos={repoScan.data ?? []}
+          refreshIssues={() => void awesomes.refetch()}
+          refreshRepos={() => void repoScan.refetch()}
+        />
       </aside>
 
       <section className="workspace">
         <header className="topbar">
-          <div>
-            <span className="eyebrow">active world</span>
-            <h1>{recovery.data?.awesome.name ?? "No world selected"}</h1>
+          <div className="topCopy">
+            <span className="eyebrow">agent mission control</span>
+            <h1>{recovery.data?.awesome.name ?? "No issue selected"}</h1>
+            <p>Select local repositories, create an issue workspace under ~/.caesar/issues, then start agents at issue or repo scope.</p>
           </div>
           <div className="topMeta" aria-label="Workspace status">
-            <span>{recovery.data?.ultraworks.length ?? 0} races</span>
-            <span>{recovery.data?.tasks.length ?? 0} quests</span>
-            <span>{events.length} bonds</span>
+            <span><strong>{runningTasks}</strong> active</span>
+            <span><strong>{needsOperator}</strong> review</span>
+            <span><strong>{events.length}</strong> traces</span>
           </div>
+          <img className="topIllustration" src="/world-map.png" alt="" />
           <button className="iconText scanButton" onClick={() => void recovery.refetch()} aria-label="Scan active world">
             <RefreshCcw size={16} />
             Scan
@@ -127,23 +159,25 @@ function WorkspaceConsole() {
         </header>
 
         <nav className="quickNav" aria-label="Console sections">
-          <a href="#races">Races</a>
-          <a href="#scroll">Scroll</a>
+          <a href="#repos">Repos</a>
+          <a href="#agents">Agents</a>
           <a href="#approvals">Approvals</a>
-          <a href="#quests">Quests</a>
+          <a href="#quests">Issues</a>
           <a href="#claims">Claims</a>
           <a href="#bonds">Bonds</a>
         </nav>
 
+        <AgentExperiencePanel tasks={tasks} events={events} ultraworkCount={recovery.data?.ultraworks.length ?? 0} />
+
         <ConceptAtlas />
 
         <div className="grid">
-          <section className="panel" id="races">
-            <PanelTitle icon={<FolderGit2 size={17} />} title="Race Registry" />
-            <UltraworkPanel ultraworks={recovery.data?.ultraworks ?? []} />
+          <section className="panel" id="repos">
+            <PanelTitle icon={<FolderGit2 size={17} />} title="Issue Repos" />
+            <IssueRepoPanel repos={recovery.data?.ultraworks ?? []} />
           </section>
-          <section className="panel" id="scroll">
-            <PanelTitle icon={<SquarePlus size={17} />} title="Draft Role Quest" />
+          <section className="panel" id="agents">
+            <PanelTitle icon={<SquarePlus size={17} />} title="Create Agent" />
             <TaskCreator ultraworks={recovery.data?.ultraworks ?? []} />
           </section>
           <section className="panel wide" id="quests">
@@ -166,6 +200,48 @@ function WorkspaceConsole() {
       </section>
       {isCodexOpen ? <CodexModal onClose={() => setIsCodexOpen(false)} /> : null}
     </main>
+  );
+}
+
+function AgentExperiencePanel({ tasks, events, ultraworkCount }: { tasks: GeekTask[]; events: TaskEvent[]; ultraworkCount: number }) {
+  const latestEvent = events.at(-1);
+  const completed = tasks.filter((task) => ["exited", "terminated"].includes(task.status)).length;
+  return (
+    <section className="agentBrief" aria-label="Agent collaboration status">
+      <article className="agentPrimary">
+        <div className="agentPrimaryHeader">
+          <Bot size={20} />
+          <div>
+            <span className="eyebrow">delegation surface</span>
+            <h2>From chat prompt to supervised execution</h2>
+          </div>
+        </div>
+        <p>
+          Caesar Geek treats each role as an accountable worker: define the outcome, bind it to local repositories, watch the trace,
+          then claim, pause, end, or branch the quest without losing context.
+        </p>
+        <div className="agentMetrics">
+          <span><strong>{ultraworkCount}</strong> workspaces</span>
+          <span><strong>{tasks.length}</strong> quests</span>
+          <span><strong>{completed}</strong> resolved</span>
+        </div>
+      </article>
+      <article className="agentCard">
+        <ClipboardCheck size={18} />
+        <strong>Intent first</strong>
+        <span>Write the goal and constraints before commands, so the role knows what success means.</span>
+      </article>
+      <article className="agentCard">
+        <ShieldAlert size={18} />
+        <strong>Operator gates</strong>
+        <span>Pause, terminate, claim, or branch any quest from the ledger when risk or ambiguity appears.</span>
+      </article>
+      <article className="agentCard">
+        <Route size={18} />
+        <strong>Traceable work</strong>
+        <span>{latestEvent ? latestEvent.message.trim() : "Live task events will stream here as soon as a role starts."}</span>
+      </article>
+    </section>
   );
 }
 
@@ -221,13 +297,24 @@ function ConceptAtlas() {
   );
 }
 
-function AwesomePanel({ awesomes, refresh }: { awesomes: RegistryRecord[]; refresh: () => void }) {
+function IssuePanel({
+  issues,
+  repos,
+  refreshIssues,
+  refreshRepos
+}: {
+  issues: RegistryRecord[];
+  repos: RepoCandidate[];
+  refreshIssues: () => void;
+  refreshRepos: () => void;
+}) {
   const qc = useQueryClient();
-  const [name, setName] = useState("Local World");
-  const [rootPath, setRootPath] = useState("");
+  const [title, setTitle] = useState("Audit selected repos");
+  const [selectedRepoPaths, setSelectedRepoPaths] = useState<string[]>([]);
   const create = useMutation({
-    mutationFn: () => trpc.awesomes.create.mutate({ name, path: rootPath }),
+    mutationFn: () => trpc.issues.create.mutate({ title, repoPaths: selectedRepoPaths }),
     onSuccess: async () => {
+      setSelectedRepoPaths([]);
       await qc.invalidateQueries({ queryKey: ["awesomes"] });
       await qc.invalidateQueries({ queryKey: ["recovery"] });
     }
@@ -243,62 +330,66 @@ function AwesomePanel({ awesomes, refresh }: { awesomes: RegistryRecord[]; refre
   return (
     <div className="stack">
       <label>
-        <span>World Name</span>
-        <input value={name} onChange={(event) => setName(event.target.value)} />
+        <span>Issue Title</span>
+        <input value={title} onChange={(event) => setTitle(event.target.value)} />
       </label>
-      <label>
-        <span>World Path</span>
-        <input value={rootPath} onChange={(event) => setRootPath(event.target.value)} placeholder="/Users/me/world" />
-      </label>
-      <button className="primary" disabled={!rootPath || create.isPending} onClick={() => create.mutate()}>
+      <div className="sideHeader">
+        <span>~/workspace/repos</span>
+        <button className="iconOnly" aria-label="Scan local repositories" onClick={refreshRepos}>
+          <RefreshCcw size={15} />
+        </button>
+      </div>
+      <div className="repoPickList">
+        {repos.map((repo) => (
+          <label className="repoPick" key={repo.path}>
+            <input
+              type="checkbox"
+              checked={selectedRepoPaths.includes(repo.path)}
+              onChange={(event) =>
+                setSelectedRepoPaths((paths) => (event.target.checked ? [...paths, repo.path] : paths.filter((path) => path !== repo.path)))
+              }
+            />
+            <span>{repo.name}</span>
+            <small>{repo.defaultBranch ?? "detached"} · {repo.headSha?.slice(0, 8) ?? "no head"}</small>
+          </label>
+        ))}
+        {repos.length === 0 ? <p className="emptyState">No git repositories found under ~/workspace/repos.</p> : null}
+      </div>
+      <button className="primary" disabled={selectedRepoPaths.length === 0 || create.isPending} onClick={() => create.mutate()}>
         <SquarePlus size={16} />
-        Found World
+        Create Issue
       </button>
       <div className="sideHeader">
-        <span>Known Worlds</span>
-        <button className="iconOnly" aria-label="Scan known worlds" onClick={refresh}>
+        <span>Known Issues</span>
+        <button className="iconOnly" aria-label="Scan known issues" onClick={refreshIssues}>
           <RefreshCcw size={15} />
         </button>
       </div>
       <div className="awesomeList">
-        {awesomes.map((awesome) => (
-          <button key={awesome.id} className="awesomeRow" onClick={() => select.mutate(awesome.id)} disabled={awesome.availability !== "available"}>
-            <span>{awesome.name}</span>
-            <small data-state={awesome.availability}>{worldGateLabel(awesome.availability)}</small>
+        {issues.map((issue) => (
+          <button key={issue.id} className="awesomeRow" onClick={() => select.mutate(issue.id)} disabled={issue.availability !== "available"}>
+            <span>{issue.name}</span>
+            <small data-state={issue.availability}>{worldGateLabel(issue.availability)}</small>
           </button>
         ))}
+        {issues.length === 0 ? <p className="emptyState">No issues created yet.</p> : null}
       </div>
     </div>
   );
 }
 
-function UltraworkPanel({ ultraworks }: { ultraworks: Ultrawork[] }) {
-  const qc = useQueryClient();
-  const [sourcePath, setSourcePath] = useState("");
-  const add = useMutation({
-    mutationFn: () => trpc.ultraworks.add.mutate({ sourcePath }),
-    onSuccess: async () => {
-      setSourcePath("");
-      await qc.invalidateQueries({ queryKey: ["recovery"] });
-    }
-  });
+function IssueRepoPanel({ repos }: { repos: Ultrawork[] }) {
   return (
     <div className="stack">
-      <div className="inlineForm">
-        <input value={sourcePath} onChange={(event) => setSourcePath(event.target.value)} placeholder="/path/to/local/git/repo" />
-        <button className="iconText" disabled={!sourcePath || add.isPending} onClick={() => add.mutate()}>
-          <FolderGit2 size={16} />
-          Add Race
-        </button>
-      </div>
       <div className="rows">
-        {ultraworks.map((ultrawork) => (
-          <div className="row" key={ultrawork.id}>
-            <strong>{ultrawork.name}</strong>
-            <span>{ultrawork.destinationPath}</span>
-            <small>{ultrawork.headSha?.slice(0, 10) ?? "unsealed"}</small>
+        {repos.map((repo) => (
+          <div className="row" key={repo.id}>
+            <strong>{repo.name}</strong>
+            <span>{repo.destinationPath}</span>
+            <small>{repo.headSha?.slice(0, 10) ?? "unsealed"}</small>
           </div>
         ))}
+        {repos.length === 0 ? <p className="emptyState">Create an issue from scanned repositories to populate this list.</p> : null}
       </div>
     </div>
   );
@@ -306,57 +397,58 @@ function UltraworkPanel({ ultraworks }: { ultraworks: Ultrawork[] }) {
 
 function TaskCreator({ ultraworks }: { ultraworks: Ultrawork[] }) {
   const qc = useQueryClient();
-  const [title, setTitle] = useState("Ask Codex");
-  const [prompt, setPrompt] = useState("Inspect this world and summarize the repository layout.");
-  const [command, setCommand] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
+  const [title, setTitle] = useState("Audit selected scope");
+  const [prompt, setPrompt] = useState("Goal: inspect the selected scope and report current status.\nConstraints: avoid destructive commands.\nReview point: stop before applying changes.");
   const create = useMutation({
-    mutationFn: () => {
-      const trimmedCommand = command.trim();
-      return trpc.tasks.create.mutate({
+    mutationFn: (scope: { ultraworkIds: string[]; cwd?: string }) =>
+      trpc.tasks.create.mutate({
         title,
         prompt,
-        ...(trimmedCommand ? { command: JSON.parse(trimmedCommand) as string[] } : {}),
-        ultraworkIds: selected,
+        ultraworkIds: scope.ultraworkIds,
+        ...(scope.cwd ? { cwd: scope.cwd } : {}),
         launch: true
-      });
-    },
+      }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["recovery"] });
     }
   });
+
   return (
     <div className="stack">
+      <div className="handoffCard">
+        <div>
+          <Gauge size={18} />
+          <strong>Agent handoff</strong>
+        </div>
+        <p>Frame the role like a delegated job: desired result, allowed scope, and the moment it should hand control back.</p>
+      </div>
       <label>
-        <span>Quest Title</span>
+        <span>Outcome</span>
         <input value={title} onChange={(event) => setTitle(event.target.value)} />
       </label>
       <label>
-        <span>Role Brief</span>
+        <span>Goal, Constraints, Review Point</span>
         <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} />
       </label>
-      <label>
-        <span>Command JSON</span>
-        <input value={command} onChange={(event) => setCommand(event.target.value)} placeholder="empty = codex exec prompt" />
-      </label>
-      <div className="checks">
-        {ultraworks.map((ultrawork) => (
-          <label key={ultrawork.id}>
-            <input
-              type="checkbox"
-              checked={selected.includes(ultrawork.id)}
-              onChange={(event) =>
-                setSelected((ids) => (event.target.checked ? [...ids, ultrawork.id] : ids.filter((id) => id !== ultrawork.id)))
-              }
-            />
-            <span>{ultrawork.name}</span>
-          </label>
-        ))}
+      <div className="reviewStrip" aria-label="Launch review checklist">
+        <span><CheckCircle2 size={15} /> Goal visible</span>
+        <span><Workflow size={15} /> Issue or repo scope</span>
+        <span><MessageSquareText size={15} /> Trace retained</span>
       </div>
-      <button className="primary" disabled={create.isPending} onClick={() => create.mutate()}>
+      <button className="primary" disabled={create.isPending || ultraworks.length === 0} onClick={() => create.mutate({ ultraworkIds: ultraworks.map((repo) => repo.id) })}>
         <Play size={16} />
-        Launch Role
+        Start Issue Agent
       </button>
+      <div className="agentLaunchList">
+        {ultraworks.map((ultrawork) => (
+          <button className="repoAgentButton" key={ultrawork.id} disabled={create.isPending} onClick={() => create.mutate({ ultraworkIds: [ultrawork.id], cwd: ultrawork.destinationPath })}>
+            <FolderGit2 size={16} />
+            <span>Start repo agent</span>
+            <strong>{ultrawork.name}</strong>
+          </button>
+        ))}
+        {ultraworks.length === 0 ? <span className="emptyPill">No repos available</span> : null}
+      </div>
       {create.data && !create.data.policy.allowed ? (
         <p className="policy">
           <ShieldAlert size={15} />
@@ -466,6 +558,7 @@ function TaskTable({ recovery }: { recovery: RecoveryState | undefined }) {
           </div>
         );
       })}
+      {(recovery?.tasks ?? []).length === 0 ? <p className="emptyState">No quests have been launched in this world.</p> : null}
     </div>
   );
 }
@@ -479,6 +572,7 @@ function EventStream({ events }: { events: TaskEvent[] }) {
           <code>{event.message.trim()}</code>
         </div>
       ))}
+      {events.length === 0 ? <p className="emptyState">Bond activity will appear here as roles run.</p> : null}
     </div>
   );
 }
@@ -496,6 +590,7 @@ function TakeoverList({ recovery }: { recovery: RecoveryState | undefined }) {
           <code data-label="Note">{event.note ?? ""}</code>
         </div>
       ))}
+      {(recovery?.takeoverEvents ?? []).length === 0 ? <p className="emptyState">No operator claims recorded yet.</p> : null}
     </div>
   );
 }

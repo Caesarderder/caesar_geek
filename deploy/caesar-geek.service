@@ -1,0 +1,16 @@
+[Unit]
+Description=Caesar Geek web server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/caesar/caesar_geek
+Environment=HOST=127.0.0.1
+Environment=PORT=4387
+Environment=CAESAR_GEEK_HOME=/var/lib/caesar-geek
+ExecStart=/usr/bin/pnpm --filter @caesar-geek/server exec tsx src/index.ts
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

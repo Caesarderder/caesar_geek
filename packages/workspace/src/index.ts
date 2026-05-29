@@ -14,6 +14,8 @@ type GitExec = (file: string, args: string[]) => Promise<{ stdout: string; stder
 export type WorkspacePaths = {
   appDataDir: string;
   registryDbPath: string;
+  localRepoRootPath: string;
+  issueRootPath: string;
 };
 
 export type WorldIssue = {
@@ -45,9 +47,12 @@ export type WorldWorktree = {
 
 export function defaultWorkspacePaths(): WorkspacePaths {
   const appDataDir = process.env.CAESAR_GEEK_HOME ?? path.join(homedir(), ".caesar-geek");
+  const caesarHomeDir = process.env.CAESAR_HOME ?? path.join(homedir(), ".caesar");
   return {
     appDataDir,
-    registryDbPath: path.join(appDataDir, "registry.sqlite")
+    registryDbPath: path.join(appDataDir, "registry.sqlite"),
+    localRepoRootPath: process.env.CAESAR_REPO_ROOT ?? path.join(homedir(), "workspace", "repos"),
+    issueRootPath: process.env.CAESAR_ISSUE_ROOT ?? path.join(caesarHomeDir, "issues")
   };
 }
 
@@ -181,6 +186,7 @@ export async function createAwesomeLayout(input: {
   await mkdir(path.join(awesomePath, ".caesar-geek", "tasks"), { recursive: true });
   await mkdir(path.join(awesomePath, ".caesar-geek", "logs"), { recursive: true });
   await mkdir(path.join(awesomePath, ".caesar-geek", "sessions"), { recursive: true });
+  await mkdir(path.join(awesomePath, "repos"), { recursive: true });
   await mkdir(path.join(awesomePath, "ultraworks"), { recursive: true });
   await mkdir(path.join(awesomePath, "artifacts"), { recursive: true });
 
@@ -240,7 +246,7 @@ export async function listGitBranches(input: {
 
 export async function createIssueWorktree(input: {
   issue: Pick<WorldIssue, "id" | "worktreesPath">;
-  repo: Pick<WorldRepoRecord, "id" | "path">;
+  repo: Pick<WorldRepoRecord, "id" | "path" | "defaultBranch">;
   branch: string;
   name?: string;
   id?: string;
@@ -256,7 +262,11 @@ export async function createIssueWorktree(input: {
   const destinationPath = path.join(path.resolve(input.issue.worktreesPath), `${slugify(name)}-${id}`);
   await assertInsideScope(destinationPath, input.issue.worktreesPath);
   await mkdir(input.issue.worktreesPath, { recursive: true });
-  await git("git", ["-C", input.repo.path, "worktree", "add", destinationPath, input.branch]);
+  const branches = await listGitBranches({ repoPath: input.repo.path, execGit: git });
+  const worktreeArgs = branches.includes(input.branch)
+    ? ["-C", input.repo.path, "worktree", "add", destinationPath, input.branch]
+    : ["-C", input.repo.path, "worktree", "add", "-b", input.branch, destinationPath, input.repo.defaultBranch ?? "HEAD"];
+  await git("git", worktreeArgs);
 
   return {
     id,
@@ -286,12 +296,15 @@ export async function resolveUltraworkDestination(input: {
   awesomePath: string;
   sourcePath: string;
   name?: string;
+  targetDir?: "repos" | "ultraworks";
 }): Promise<{ name: string; slug: string; destinationPath: string; sourcePath: string }> {
   const sourceRealPath = await realpath(input.sourcePath);
   const repoName = input.name ?? path.basename(sourceRealPath);
   const slug = slugify(repoName);
-  const destinationPath = path.join(path.resolve(input.awesomePath), "ultraworks", slug);
-  await assertInsideScope(destinationPath, path.join(input.awesomePath, "ultraworks"));
+  const targetDir = input.targetDir ?? "ultraworks";
+  const targetRoot = path.join(path.resolve(input.awesomePath), targetDir);
+  const destinationPath = path.join(targetRoot, slug);
+  await assertInsideScope(destinationPath, targetRoot);
   return { name: repoName, slug, destinationPath, sourcePath: sourceRealPath };
 }
 
@@ -301,12 +314,14 @@ export async function cloneUltrawork(input: {
   name?: string;
   id?: string;
   execGit?: typeof execFileAsync;
+  targetDir?: "repos" | "ultraworks";
 }): Promise<Ultrawork> {
   const git = input.execGit ?? execFileAsync;
   const source = await resolveUltraworkDestination({
     awesomePath: input.awesome.path,
     sourcePath: input.sourcePath,
-    ...(input.name ? { name: input.name } : {})
+    ...(input.name ? { name: input.name } : {}),
+    ...(input.targetDir ? { targetDir: input.targetDir } : {})
   });
   if (!(await isGitRepository(source.sourcePath))) {
     throw new Error(`Source path is not a git repository: ${source.sourcePath}`);

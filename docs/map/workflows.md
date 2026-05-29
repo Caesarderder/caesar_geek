@@ -11,6 +11,7 @@ source_of_truth:
   - docs/workflows/impact-map.md
   - docs/workflows/code-writing-review.md
   - docs/workflows/knowledge-map-maintenance.md
+  - docs/runbooks/cloud-deployment.md
 validated_by:
   - manual-docs-review
 tags:
@@ -21,6 +22,7 @@ related:
   - workflow.impact-map
   - workflow.code-writing-review
   - workflow.knowledge-map-maintenance
+  - runbook.cloud-deployment
 ---
 
 # 工作流索引
@@ -34,6 +36,7 @@ related:
 | 写代码、修 bug、重构、审查 | KM:workflow.impact-map | [impact-map.md](../workflows/impact-map.md) |
 | 编码和审查执行 | KM:workflow.code-writing-review | [code-writing-review.md](../workflows/code-writing-review.md) |
 | 更新 docs、同步事实 | KM:workflow.knowledge-map-maintenance | [knowledge-map-maintenance.md](../workflows/knowledge-map-maintenance.md) |
+| 云端发布、Nginx/systemd 运维、Basic Auth 验证 | KM:runbook.cloud-deployment | [cloud-deployment.md](../runbooks/cloud-deployment.md) |
 
 ## 使用规则
 
