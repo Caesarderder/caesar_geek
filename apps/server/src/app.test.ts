@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -269,7 +269,58 @@ describe("server acceptance path", () => {
     expect(recovery.approvals.find((approval) => approval.id === rejected.approval!.id)?.status).toBe("rejected");
     await restarted.fastify.close();
   });
+
+  it("creates a tracked deployment task that syncs and builds from the app root", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cg-home-"));
+    const awesomeRoot = await mkdtemp(path.join(tmpdir(), "awesome-deploy-"));
+    const appRoot = await mkdtemp(path.join(tmpdir(), "cg-app-root-"));
+    const fakeBin = path.join(await mkdtemp(path.join(tmpdir(), "cg-bin-")), "bin");
+    await mkdir(fakeBin);
+    await writeExecutable(
+      path.join(fakeBin, "git"),
+      `#!/bin/sh
+if [ "$1" = "branch" ]; then
+  echo main
+  exit 0
+fi
+exit 0
+`
+    );
+    await writeExecutable(
+      path.join(fakeBin, "pnpm"),
+      `#!/bin/sh
+exit 0
+`
+    );
+    process.env.CAESAR_GEEK_HOME = home;
+    process.env.CAESAR_APP_ROOT = appRoot;
+    delete process.env.CAESAR_DEPLOY_COMMAND;
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${fakeBin}:${originalPath ?? ""}`;
+
+    const { fastify, ctx } = await buildServer();
+    const caller = appRouter.createCaller(ctx);
+    await caller.awesomes.create({ name: "Deployments", path: awesomeRoot });
+
+    const deployment = await caller.deployments.start();
+    expect(deployment.policy.allowed).toBe(true);
+    expect(deployment.task.cwd).toBe(appRoot);
+    expect(deployment.task.command.join(" ")).toContain("git pull --ff-only");
+    await waitForTaskStatus(caller, deployment.task.id, "exited", 9000);
+
+    const recovery = await caller.tasks.recovery();
+    expect(recovery.latestEvents.some((event) => event.message.includes("Deployment task persisted"))).toBe(true);
+
+    await fastify.close();
+    process.env.PATH = originalPath;
+    delete process.env.CAESAR_APP_ROOT;
+  }, 10_000);
 });
+
+async function writeExecutable(filePath: string, content: string): Promise<void> {
+  await writeFile(filePath, content);
+  await chmod(filePath, 0o755);
+}
 
 async function createFixtureRepo(repoPath: string): Promise<void> {
   await execFileAsync("git", ["init", "--initial-branch=main", repoPath]);
@@ -283,16 +334,19 @@ async function createFixtureRepo(repoPath: string): Promise<void> {
 async function waitForTaskStatus(
   caller: ReturnType<typeof appRouter.createCaller>,
   taskId: string,
-  status: string
+  status: string,
+  timeoutMs = 5000
 ): Promise<void> {
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + timeoutMs;
+  let latestStatus = "missing";
   while (Date.now() < deadline) {
     const recovery = await caller.tasks.recovery();
     const task = recovery.tasks.find((candidate) => candidate.id === taskId);
+    latestStatus = task?.status ?? "missing";
     if (task?.status === status) {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new Error(`Timed out waiting for task ${taskId} to reach ${status}`);
+  throw new Error(`Timed out waiting for task ${taskId} to reach ${status}; latest status was ${latestStatus}`);
 }

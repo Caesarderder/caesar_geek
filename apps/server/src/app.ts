@@ -37,6 +37,7 @@ export type AppContext = {
   events: Set<(event: TaskEvent) => void>;
   localRepoRootPath: string;
   issueRootPath: string;
+  appRootPath: string;
 };
 
 const t = initTRPC.context<AppContext>().create();
@@ -80,6 +81,22 @@ function publishEvent(store: AwesomeStore, ctx: AppContext, event: TaskEvent): v
   for (const listener of ctx.events) {
     listener(event);
   }
+}
+
+function buildDeployCommand(): string[] {
+  return [
+    "sh",
+    "-c",
+    [
+      "set -eu",
+      "branch=$(git branch --show-current)",
+      "git fetch origin \"$branch\"",
+      "git pull --ff-only origin \"$branch\"",
+      "pnpm install --frozen-lockfile",
+      "pnpm build",
+      "if [ -n \"${CAESAR_DEPLOY_COMMAND:-}\" ]; then sh -lc \"$CAESAR_DEPLOY_COMMAND\"; fi"
+    ].join("\n")
+  ];
 }
 
 export const appRouter = t.router({
@@ -322,6 +339,64 @@ export const appRouter = t.router({
       return { terminated: requireActive(ctx).runtime.terminate(input.taskId) };
     })
   }),
+  deployments: t.router({
+    start: publicProcedure.mutation(({ ctx }) => {
+      const active = requireActive(ctx);
+      const command = buildDeployCommand();
+      const policy = classifyHighRiskAction({ command, scopePath: ctx.appRootPath });
+      const task = active.runtime.createTaskDraft({
+        awesomeId: active.awesome.id,
+        title: "Update and deploy Caesar Geek",
+        prompt: [
+          "Sync the server checkout to the latest commit on the current branch.",
+          "Install dependencies with the lockfile, build all packages, then run CAESAR_DEPLOY_COMMAND when configured.",
+          "Use this task event stream as the deployment log."
+        ].join("\n"),
+        command,
+        cwd: ctx.appRootPath
+      });
+      if (!policy.allowed) {
+        task.status = "queued";
+      }
+      active.store.createTask(task, []);
+      publishEvent(active.store, ctx, {
+        id: `event_${randomUUID()}`,
+        taskId: task.id,
+        type: "status",
+        message: "Deployment task persisted before launch.",
+        payload: { appRootPath: ctx.appRootPath },
+        createdAt: nowIso()
+      });
+      if (!policy.allowed && policy.action) {
+        const createdAt = nowIso();
+        const approval: ApprovalRecord = {
+          id: `approval_${randomUUID()}`,
+          taskId: task.id,
+          status: "pending",
+          action: policy.action,
+          reason: policy.reason,
+          requestedBy: "operator",
+          decidedBy: null,
+          createdAt,
+          updatedAt: createdAt,
+          decidedAt: null,
+          expiresAt: null
+        };
+        active.store.createApproval(approval);
+        publishEvent(active.store, ctx, {
+          id: `event_${randomUUID()}`,
+          taskId: task.id,
+          type: "policy",
+          message: "Deployment task is pending persisted approval.",
+          payload: { approvalId: approval.id, action: approval.action, reason: approval.reason },
+          createdAt
+        });
+        return { task, policy, approval };
+      }
+      active.runtime.launch(task);
+      return { task, policy, approval: null };
+    })
+  }),
   policy: t.router({
     classify: publicProcedure
       .input(z.object({ command: z.array(z.string()).optional(), targetPath: z.string().optional(), externalDestination: z.string().optional() }))
@@ -412,7 +487,8 @@ export async function buildServer() {
     activeAwesome: null,
     events: new Set(),
     localRepoRootPath: paths.localRepoRootPath,
-    issueRootPath: paths.issueRootPath
+    issueRootPath: paths.issueRootPath,
+    appRootPath: process.env.CAESAR_APP_ROOT ?? path.resolve(process.cwd(), "..", "..")
   };
   const fastify = Fastify({ logger: true });
   await fastify.register(cors, { origin: true });

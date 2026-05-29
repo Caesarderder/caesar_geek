@@ -3,23 +3,22 @@ import { createTRPCProxyClient, httpBatchLink } from "@trpc/client";
 import {
   Activity,
   Bot,
-  BookOpen,
-  CheckCircle2,
-  ClipboardCheck,
+  Check,
+  CircleAlert,
+  Clock3,
   FolderGit2,
   GitBranchPlus,
-  Gauge,
-  Hammer,
-  MessageSquareText,
+  MessageSquarePlus,
   Octagon,
+  PanelLeft,
   Pause,
-  Play,
   RefreshCcw,
-  Route,
-  ShieldAlert,
-  SquarePlus,
+  Rocket,
+  Search,
+  Send,
+  ShieldCheck,
+  Sparkles,
   UserCheck,
-  Workflow,
   X
 } from "lucide-react";
 import React, { useEffect, useMemo, useState } from "react";
@@ -36,13 +35,7 @@ type TrpcClient = {
   };
   awesomes: {
     list: { query(): Promise<RegistryRecord[]> };
-    create: { mutate(input: { name: string; path: string }): Promise<{ awesome: unknown; record: RegistryRecord }> };
     select: { mutate(input: { id: string }): Promise<unknown> };
-    active: { query(): Promise<unknown> };
-  };
-  ultraworks: {
-    list: { query(): Promise<Ultrawork[]> };
-    add: { mutate(input: { sourcePath: string; name?: string }): Promise<Ultrawork> };
   };
   tasks: {
     recovery: { query(): Promise<RecoveryState> };
@@ -53,9 +46,11 @@ type TrpcClient = {
     terminate: { mutate(input: { taskId: string }): Promise<{ terminated: boolean }> };
   };
   approvals: {
-    listPending: { query(): Promise<ApprovalRecord[]> };
     approve: { mutate(input: { approvalId: string; decidedBy?: string }): Promise<ApprovalRecord> };
     reject: { mutate(input: { approvalId: string; decidedBy?: string }): Promise<ApprovalRecord> };
+  };
+  deployments: {
+    start: { mutate(): Promise<{ task: GeekTask; policy: { allowed: boolean; reason: string }; approval: ApprovalRecord | null }> };
   };
 };
 
@@ -94,7 +89,6 @@ function App() {
 function WorkspaceConsole() {
   const qc = useQueryClient();
   const [eventLog, setEventLog] = useState<TaskEvent[]>([]);
-  const [isCodexOpen, setIsCodexOpen] = useState(false);
   const awesomes = useQuery({ queryKey: ["awesomes"], queryFn: () => trpc.awesomes.list.query() });
   const repoScan = useQuery({ queryKey: ["repos", "scan"], queryFn: () => trpc.repos.scan.query() });
   const recovery = useQuery({
@@ -115,22 +109,15 @@ function WorkspaceConsole() {
 
   const events = useMemo(() => [...(recovery.data?.latestEvents ?? []), ...eventLog].slice(-120), [eventLog, recovery.data?.latestEvents]);
   const tasks = recovery.data?.tasks ?? [];
+  const pendingApprovals = recovery.data?.approvals.filter((approval) => approval.status === "pending").length ?? 0;
   const runningTasks = tasks.filter((task) => ["queued", "running"].includes(task.status)).length;
-  const needsOperator = tasks.filter((task) => ["created", "claimed", "interrupted", "failed", "orphaned"].includes(task.status)).length;
+  const completedTasks = tasks.filter((task) => ["exited", "terminated"].includes(task.status)).length;
+  const activeIssue = recovery.data?.awesome.name ?? "选择或创建一个工作区";
 
   return (
-    <main className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <button className="brandAvatar" type="button" aria-label="Open Caesar Geek codex" onClick={() => setIsCodexOpen(true)}>
-            <img className="brandIcon" src="/caesar-geek-icon.png" alt="" />
-          </button>
-          <div>
-            <strong>Caesar Geek</strong>
-            <span>local issue agents</span>
-          </div>
-          <img className="brandCrest" src="/race-sigil.png" alt="" />
-        </div>
+    <main className="appShell">
+      <aside className="sideRail" aria-label="Workspaces and repositories">
+        <Brand />
         <IssuePanel
           issues={awesomes.data ?? []}
           repos={repoScan.data ?? []}
@@ -139,161 +126,72 @@ function WorkspaceConsole() {
         />
       </aside>
 
-      <section className="workspace">
-        <header className="topbar">
-          <div className="topCopy">
-            <span className="eyebrow">agent mission control</span>
-            <h1>{recovery.data?.awesome.name ?? "No issue selected"}</h1>
-            <p>Select local repositories, create an issue workspace under ~/.caesar/issues, then start agents at issue or repo scope.</p>
+      <section className="chatPane" aria-label="Agent workspace">
+        <header className="chatHeader">
+          <div className="chatTitle">
+            <span className="sectionKicker">
+              <Sparkles size={14} />
+              Agent workspace
+            </span>
+            <h1>{activeIssue}</h1>
           </div>
-          <div className="topMeta" aria-label="Workspace status">
-            <span><strong>{runningTasks}</strong> active</span>
-            <span><strong>{needsOperator}</strong> review</span>
-            <span><strong>{events.length}</strong> traces</span>
+          <div className="headerActions">
+            <Metric label="运行中" value={runningTasks} tone="blue" />
+            <Metric label="待审批" value={pendingApprovals} tone={pendingApprovals > 0 ? "amber" : "green"} />
+            <button className="ghostButton" type="button" onClick={() => void recovery.refetch()}>
+              <RefreshCcw size={16} />
+              刷新
+            </button>
           </div>
-          <img className="topIllustration" src="/world-map.png" alt="" />
-          <button className="iconText scanButton" onClick={() => void recovery.refetch()} aria-label="Scan active world">
-            <RefreshCcw size={16} />
-            Scan
-          </button>
         </header>
 
-        <nav className="quickNav" aria-label="Console sections">
-          <a href="#repos">Repos</a>
-          <a href="#agents">Agents</a>
-          <a href="#approvals">Approvals</a>
-          <a href="#quests">Issues</a>
-          <a href="#claims">Claims</a>
-          <a href="#bonds">Bonds</a>
-        </nav>
+        <section className="heroPrompt" aria-label="Start an agent task">
+          <div>
+            <span className="sectionKicker">
+              <Bot size={14} />
+              和本地 AI 代理协作
+            </span>
+            <h2>描述目标，选择范围，剩下的交给可监督的任务流。</h2>
+            <p>界面只保留三件事：你要什么、代理正在做什么、哪里需要你确认。</p>
+          </div>
+          <AgentComposer ultraworks={recovery.data?.ultraworks ?? []} />
+        </section>
 
-        <AgentExperiencePanel tasks={tasks} events={events} ultraworkCount={recovery.data?.ultraworks.length ?? 0} />
-
-        <ConceptAtlas />
-
-        <div className="grid">
-          <section className="panel" id="repos">
-            <PanelTitle icon={<FolderGit2 size={17} />} title="Issue Repos" />
-            <IssueRepoPanel repos={recovery.data?.ultraworks ?? []} />
-          </section>
-          <section className="panel" id="agents">
-            <PanelTitle icon={<SquarePlus size={17} />} title="Create Agent" />
-            <TaskCreator ultraworks={recovery.data?.ultraworks ?? []} />
-          </section>
-          <section className="panel wide" id="quests">
-            <PanelTitle icon={<Hammer size={17} />} title="Quest Ledger" />
-            <TaskTable recovery={recovery.data} />
-          </section>
-          <section className="panel wide" id="approvals">
-            <PanelTitle icon={<ShieldAlert size={17} />} title="Approval Gate" />
-            <ApprovalGate recovery={recovery.data} />
-          </section>
-          <section className="panel wide" id="claims">
-            <PanelTitle icon={<UserCheck size={17} />} title="Role Claims" />
-            <TakeoverList recovery={recovery.data} />
-          </section>
-          <section className="panel wide" id="bonds">
-            <PanelTitle icon={<Activity size={17} />} title="Bond Stream" />
-            <EventStream events={events} />
-          </section>
-        </div>
+        <TaskFeed recovery={recovery.data} />
       </section>
-      {isCodexOpen ? <CodexModal onClose={() => setIsCodexOpen(false)} /> : null}
+
+      <aside className="contextRail" aria-label="Execution context">
+        <StatusPanel runningTasks={runningTasks} completedTasks={completedTasks} events={events.length} repoCount={recovery.data?.ultraworks.length ?? 0} />
+        <DeployPanel hasActiveWorkspace={Boolean(recovery.data)} />
+        <ApprovalGate recovery={recovery.data} />
+        <RepoScope repos={recovery.data?.ultraworks ?? []} />
+        <EventStream events={events} />
+      </aside>
     </main>
   );
 }
 
-function AgentExperiencePanel({ tasks, events, ultraworkCount }: { tasks: GeekTask[]; events: TaskEvent[]; ultraworkCount: number }) {
-  const latestEvent = events.at(-1);
-  const completed = tasks.filter((task) => ["exited", "terminated"].includes(task.status)).length;
+function Brand() {
   return (
-    <section className="agentBrief" aria-label="Agent collaboration status">
-      <article className="agentPrimary">
-        <div className="agentPrimaryHeader">
-          <Bot size={20} />
-          <div>
-            <span className="eyebrow">delegation surface</span>
-            <h2>From chat prompt to supervised execution</h2>
-          </div>
-        </div>
-        <p>
-          Caesar Geek treats each role as an accountable worker: define the outcome, bind it to local repositories, watch the trace,
-          then claim, pause, end, or branch the quest without losing context.
-        </p>
-        <div className="agentMetrics">
-          <span><strong>{ultraworkCount}</strong> workspaces</span>
-          <span><strong>{tasks.length}</strong> quests</span>
-          <span><strong>{completed}</strong> resolved</span>
-        </div>
-      </article>
-      <article className="agentCard">
-        <ClipboardCheck size={18} />
-        <strong>Intent first</strong>
-        <span>Write the goal and constraints before commands, so the role knows what success means.</span>
-      </article>
-      <article className="agentCard">
-        <ShieldAlert size={18} />
-        <strong>Operator gates</strong>
-        <span>Pause, terminate, claim, or branch any quest from the ledger when risk or ambiguity appears.</span>
-      </article>
-      <article className="agentCard">
-        <Route size={18} />
-        <strong>Traceable work</strong>
-        <span>{latestEvent ? latestEvent.message.trim() : "Live task events will stream here as soon as a role starts."}</span>
-      </article>
-    </section>
-  );
-}
-
-function PanelTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
-  return (
-    <div className="panelTitle">
-      {icon}
-      <h2>{title}</h2>
+    <div className="brand">
+      <img src="/caesar-geek-icon.png" alt="" />
+      <div>
+        <strong>Caesar Geek</strong>
+        <span>Local AI workbench</span>
+      </div>
+      <button className="iconButton" type="button" aria-label="Toggle sidebar">
+        <PanelLeft size={17} />
+      </button>
     </div>
   );
 }
 
-const conceptAssets = [
-  {
-    term: "world",
-    title: "World",
-    copy: "The awesome boundary where state, tasks, logs, and recovery live.",
-    image: "/world-map.png"
-  },
-  {
-    term: "race",
-    title: "Race",
-    copy: "An ultrawork lineage cloned from a local git repository.",
-    image: "/race-sigil.png"
-  },
-  {
-    term: "role",
-    title: "Role",
-    copy: "A geek or agent identity launched to carry out a quest.",
-    image: "/role-operator.png"
-  },
-  {
-    term: "bond",
-    title: "Bond",
-    copy: "The orchestration graph between races and their shared quests.",
-    image: "/bond-network.png"
-  }
-] as const;
-
-function ConceptAtlas() {
+function Metric({ label, value, tone }: { label: string; value: number; tone: "blue" | "green" | "amber" }) {
   return (
-    <section className="conceptAtlas" aria-label="World model">
-      {conceptAssets.map((asset) => (
-        <article className="conceptCard" key={asset.term}>
-          <img src={asset.image} alt="" loading="lazy" />
-          <div>
-            <strong>{asset.title}</strong>
-            <span>{asset.copy}</span>
-          </div>
-        </article>
-      ))}
-    </section>
+    <span className="metric" data-tone={tone}>
+      <strong>{value}</strong>
+      {label}
+    </span>
   );
 }
 
@@ -310,6 +208,7 @@ function IssuePanel({
 }) {
   const qc = useQueryClient();
   const [title, setTitle] = useState("Audit selected repos");
+  const [repoFilter, setRepoFilter] = useState("");
   const [selectedRepoPaths, setSelectedRepoPaths] = useState<string[]>([]);
   const create = useMutation({
     mutationFn: () => trpc.issues.create.mutate({ title, repoPaths: selectedRepoPaths }),
@@ -326,136 +225,254 @@ function IssuePanel({
       await qc.invalidateQueries({ queryKey: ["awesomes"] });
     }
   });
+  const visibleRepos = repos.filter((repo) => repo.name.toLowerCase().includes(repoFilter.toLowerCase()) || repo.path.toLowerCase().includes(repoFilter.toLowerCase()));
 
   return (
-    <div className="stack">
-      <label>
-        <span>Issue Title</span>
-        <input value={title} onChange={(event) => setTitle(event.target.value)} />
-      </label>
-      <div className="sideHeader">
-        <span>~/workspace/repos</span>
-        <button className="iconOnly" aria-label="Scan local repositories" onClick={refreshRepos}>
-          <RefreshCcw size={15} />
-        </button>
-      </div>
-      <div className="repoPickList">
-        {repos.map((repo) => (
-          <label className="repoPick" key={repo.path}>
-            <input
-              type="checkbox"
-              checked={selectedRepoPaths.includes(repo.path)}
-              onChange={(event) =>
-                setSelectedRepoPaths((paths) => (event.target.checked ? [...paths, repo.path] : paths.filter((path) => path !== repo.path)))
-              }
-            />
-            <span>{repo.name}</span>
-            <small>{repo.defaultBranch ?? "detached"} · {repo.headSha?.slice(0, 8) ?? "no head"}</small>
-          </label>
-        ))}
-        {repos.length === 0 ? <p className="emptyState">No git repositories found under ~/workspace/repos.</p> : null}
-      </div>
-      <button className="primary" disabled={selectedRepoPaths.length === 0 || create.isPending} onClick={() => create.mutate()}>
-        <SquarePlus size={16} />
-        Create Issue
-      </button>
-      <div className="sideHeader">
-        <span>Known Issues</span>
-        <button className="iconOnly" aria-label="Scan known issues" onClick={refreshIssues}>
-          <RefreshCcw size={15} />
-        </button>
-      </div>
-      <div className="awesomeList">
-        {issues.map((issue) => (
-          <button key={issue.id} className="awesomeRow" onClick={() => select.mutate(issue.id)} disabled={issue.availability !== "available"}>
-            <span>{issue.name}</span>
-            <small data-state={issue.availability}>{worldGateLabel(issue.availability)}</small>
+    <div className="sideStack">
+      <section className="sideSection">
+        <div className="sectionHead">
+          <span>工作区</span>
+          <button className="iconButton" type="button" aria-label="Refresh workspaces" onClick={refreshIssues}>
+            <RefreshCcw size={15} />
           </button>
-        ))}
-        {issues.length === 0 ? <p className="emptyState">No issues created yet.</p> : null}
-      </div>
+        </div>
+        <div className="workspaceList">
+          {issues.map((issue) => (
+            <button key={issue.id} className="workspaceItem" type="button" onClick={() => select.mutate(issue.id)} disabled={issue.availability !== "available"}>
+              <span>{issue.name}</span>
+              <small data-state={issue.availability}>{issueStateLabel(issue.availability)}</small>
+            </button>
+          ))}
+          {issues.length === 0 ? <p className="emptyState">还没有工作区。先从本地仓库创建一个。</p> : null}
+        </div>
+      </section>
+
+      <section className="sideSection">
+        <div className="sectionHead">
+          <span>新建工作区</span>
+          <button className="iconButton" type="button" aria-label="Scan repositories" onClick={refreshRepos}>
+            <RefreshCcw size={15} />
+          </button>
+        </div>
+        <label className="field">
+          <span>标题</span>
+          <input value={title} onChange={(event) => setTitle(event.target.value)} />
+        </label>
+        <label className="searchField">
+          <Search size={15} />
+          <input value={repoFilter} placeholder="筛选仓库" onChange={(event) => setRepoFilter(event.target.value)} />
+        </label>
+        <div className="repoPickList">
+          {visibleRepos.map((repo) => (
+            <label className="repoPick" key={repo.path}>
+              <input
+                type="checkbox"
+                checked={selectedRepoPaths.includes(repo.path)}
+                onChange={(event) =>
+                  setSelectedRepoPaths((paths) => (event.target.checked ? [...paths, repo.path] : paths.filter((path) => path !== repo.path)))
+                }
+              />
+              <span>{repo.name}</span>
+              <small>{repo.defaultBranch ?? "detached"} · {repo.headSha?.slice(0, 8) ?? "no head"}</small>
+            </label>
+          ))}
+          {visibleRepos.length === 0 ? <p className="emptyState">没有匹配的 git 仓库。</p> : null}
+        </div>
+        <button className="primaryButton" type="button" disabled={selectedRepoPaths.length === 0 || create.isPending} onClick={() => create.mutate()}>
+          <MessageSquarePlus size={16} />
+          创建并进入
+        </button>
+      </section>
     </div>
   );
 }
 
-function IssueRepoPanel({ repos }: { repos: Ultrawork[] }) {
-  return (
-    <div className="stack">
-      <div className="rows">
-        {repos.map((repo) => (
-          <div className="row" key={repo.id}>
-            <strong>{repo.name}</strong>
-            <span>{repo.destinationPath}</span>
-            <small>{repo.headSha?.slice(0, 10) ?? "unsealed"}</small>
-          </div>
-        ))}
-        {repos.length === 0 ? <p className="emptyState">Create an issue from scanned repositories to populate this list.</p> : null}
-      </div>
-    </div>
-  );
-}
-
-function TaskCreator({ ultraworks }: { ultraworks: Ultrawork[] }) {
+function AgentComposer({ ultraworks }: { ultraworks: Ultrawork[] }) {
   const qc = useQueryClient();
   const [title, setTitle] = useState("Audit selected scope");
   const [prompt, setPrompt] = useState("Goal: inspect the selected scope and report current status.\nConstraints: avoid destructive commands.\nReview point: stop before applying changes.");
+  const [scope, setScope] = useState("all");
   const create = useMutation({
-    mutationFn: (scope: { ultraworkIds: string[]; cwd?: string }) =>
-      trpc.tasks.create.mutate({
+    mutationFn: () => {
+      const selectedRepo = ultraworks.find((repo) => repo.id === scope);
+      const ultraworkIds = selectedRepo ? [selectedRepo.id] : ultraworks.map((repo) => repo.id);
+      return trpc.tasks.create.mutate({
         title,
         prompt,
-        ultraworkIds: scope.ultraworkIds,
-        ...(scope.cwd ? { cwd: scope.cwd } : {}),
+        ultraworkIds,
+        ...(selectedRepo ? { cwd: selectedRepo.destinationPath } : {}),
         launch: true
-      }),
+      });
+    },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["recovery"] });
     }
   });
 
   return (
-    <div className="stack">
-      <div className="handoffCard">
-        <div>
-          <Gauge size={18} />
-          <strong>Agent handoff</strong>
-        </div>
-        <p>Frame the role like a delegated job: desired result, allowed scope, and the moment it should hand control back.</p>
-      </div>
-      <label>
-        <span>Outcome</span>
+    <form
+      className="composer"
+      onSubmit={(event) => {
+        event.preventDefault();
+        create.mutate();
+      }}
+    >
+      <label className="field compact">
+        <span>任务名称</span>
         <input value={title} onChange={(event) => setTitle(event.target.value)} />
       </label>
-      <label>
-        <span>Goal, Constraints, Review Point</span>
-        <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} />
+      <label className="field">
+        <span>给代理的上下文</span>
+        <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={5} />
       </label>
-      <div className="reviewStrip" aria-label="Launch review checklist">
-        <span><CheckCircle2 size={15} /> Goal visible</span>
-        <span><Workflow size={15} /> Issue or repo scope</span>
-        <span><MessageSquareText size={15} /> Trace retained</span>
-      </div>
-      <button className="primary" disabled={create.isPending || ultraworks.length === 0} onClick={() => create.mutate({ ultraworkIds: ultraworks.map((repo) => repo.id) })}>
-        <Play size={16} />
-        Start Issue Agent
-      </button>
-      <div className="agentLaunchList">
-        {ultraworks.map((ultrawork) => (
-          <button className="repoAgentButton" key={ultrawork.id} disabled={create.isPending} onClick={() => create.mutate({ ultraworkIds: [ultrawork.id], cwd: ultrawork.destinationPath })}>
-            <FolderGit2 size={16} />
-            <span>Start repo agent</span>
-            <strong>{ultrawork.name}</strong>
-          </button>
-        ))}
-        {ultraworks.length === 0 ? <span className="emptyPill">No repos available</span> : null}
+      <div className="composerFooter">
+        <label className="selectField">
+          <FolderGit2 size={15} />
+          <select value={scope} onChange={(event) => setScope(event.target.value)}>
+            <option value="all">全部仓库</option>
+            {ultraworks.map((repo) => (
+              <option value={repo.id} key={repo.id}>
+                {repo.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="primaryButton" type="submit" disabled={create.isPending || ultraworks.length === 0}>
+          <Send size={16} />
+          启动代理
+        </button>
       </div>
       {create.data && !create.data.policy.allowed ? (
-        <p className="policy">
-          <ShieldAlert size={15} />
-          {create.data.approval ? `Approval queued: ${create.data.policy.reason}` : create.data.policy.reason}
+        <p className="policyNote">
+          <CircleAlert size={15} />
+          {create.data.approval ? `已进入审批队列：${create.data.policy.reason}` : create.data.policy.reason}
         </p>
       ) : null}
-    </div>
+    </form>
+  );
+}
+
+function TaskFeed({ recovery }: { recovery: RecoveryState | undefined }) {
+  const qc = useQueryClient();
+  const claim = useMutation({ mutationFn: (taskId: string) => trpc.tasks.claim.mutate({ taskId, claimedBy: "operator" }), onSuccess: () => qc.invalidateQueries({ queryKey: ["recovery"] }) });
+  const followUp = useMutation({
+    mutationFn: (task: GeekTask) =>
+      trpc.tasks.followUp.mutate({
+        taskId: task.id,
+        claimedBy: "operator",
+        prompt: `Continue from: ${task.prompt}`,
+        command: task.command,
+        launch: false
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["recovery"] })
+  });
+  const interrupt = useMutation({ mutationFn: (taskId: string) => trpc.tasks.interrupt.mutate({ taskId }), onSuccess: () => qc.invalidateQueries({ queryKey: ["recovery"] }) });
+  const terminate = useMutation({ mutationFn: (taskId: string) => trpc.tasks.terminate.mutate({ taskId }), onSuccess: () => qc.invalidateQueries({ queryKey: ["recovery"] }) });
+  const tasks = recovery?.tasks ?? [];
+
+  return (
+    <section className="taskFeed" aria-label="Agent tasks">
+      <div className="feedHead">
+        <div>
+          <span className="sectionKicker">
+            <Activity size={14} />
+            Conversation timeline
+          </span>
+          <h2>代理任务</h2>
+        </div>
+        <span>{tasks.length} 个任务</span>
+      </div>
+      <div className="taskList">
+        {tasks.map((task) => {
+          const linked = recovery?.taskUltraworks.filter((link) => link.taskId === task.id).length ?? 0;
+          return (
+            <article className="taskCard" key={task.id} data-status={task.status}>
+              <div className="taskIcon">
+                <Bot size={18} />
+              </div>
+              <div className="taskBody">
+                <div className="taskCardHead">
+                  <h3>{task.title}</h3>
+                  <span className="statusPill">{taskStateLabel(task.status)}</span>
+                </div>
+                <p>{task.prompt}</p>
+                <div className="taskMeta">
+                  <span>
+                    <FolderGit2 size={14} />
+                    {linked} scope
+                  </span>
+                  <span>
+                    <Clock3 size={14} />
+                    {task.command.join(" ")}
+                  </span>
+                </div>
+                {task.cwd ? <code className="pathLine">{task.cwd}</code> : null}
+                <div className="taskActions">
+                  <button className="iconTextButton" type="button" onClick={() => claim.mutate(task.id)}>
+                    <UserCheck size={15} />
+                    接管
+                  </button>
+                  <button className="iconTextButton" type="button" onClick={() => interrupt.mutate(task.id)}>
+                    <Pause size={15} />
+                    暂停
+                  </button>
+                  <button className="iconTextButton danger" type="button" onClick={() => terminate.mutate(task.id)}>
+                    <Octagon size={15} />
+                    终止
+                  </button>
+                  <button className="iconTextButton" type="button" onClick={() => followUp.mutate(task)}>
+                    <GitBranchPlus size={15} />
+                    追问
+                  </button>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+        {tasks.length === 0 ? <p className="emptyState">还没有任务。写下目标并启动第一个代理。</p> : null}
+      </div>
+    </section>
+  );
+}
+
+function StatusPanel({ runningTasks, completedTasks, events, repoCount }: { runningTasks: number; completedTasks: number; events: number; repoCount: number }) {
+  return (
+    <section className="railPanel">
+      <div className="sectionHead">
+        <span>运行概览</span>
+        <ShieldCheck size={16} />
+      </div>
+      <div className="statusGrid">
+        <Metric label="运行" value={runningTasks} tone="blue" />
+        <Metric label="完成" value={completedTasks} tone="green" />
+        <Metric label="事件" value={events} tone="amber" />
+        <Metric label="仓库" value={repoCount} tone="blue" />
+      </div>
+    </section>
+  );
+}
+
+function DeployPanel({ hasActiveWorkspace }: { hasActiveWorkspace: boolean }) {
+  const qc = useQueryClient();
+  const deploy = useMutation({
+    mutationFn: () => trpc.deployments.start.mutate(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["recovery"] })
+  });
+  return (
+    <section className="railPanel deployPanel">
+      <div className="sectionHead">
+        <span>更新/部署</span>
+        <Rocket size={16} />
+      </div>
+      <p>同步当前分支到最新提交，安装依赖并构建；服务器可通过 CAESAR_DEPLOY_COMMAND 接入重启或云端发布。</p>
+      <button className="primaryButton deployButton" type="button" disabled={!hasActiveWorkspace || deploy.isPending} onClick={() => deploy.mutate()}>
+        <RefreshCcw size={16} />
+        {deploy.isPending ? "正在创建任务" : "自动更新部署"}
+      </button>
+      {!hasActiveWorkspace ? <small>先选择或创建一个工作区，用于记录部署日志。</small> : null}
+      {deploy.data ? <small>已创建任务：{taskStateLabel(deploy.data.task.status)}</small> : null}
+      {deploy.error ? <small className="dangerText">{deploy.error.message}</small> : null}
+    </section>
   );
 }
 
@@ -473,343 +490,126 @@ function ApprovalGate({ recovery }: { recovery: RecoveryState | undefined }) {
   const approvals = recovery?.approvals ?? [];
 
   return (
-    <div className="approvalList">
-      {approvals.length === 0 ? <p className="emptyState">No persisted approval decisions for this world.</p> : null}
-      {approvals.map((approval) => (
-        <div className="approvalRow" key={approval.id} data-state={approval.status}>
-          <div>
-            <strong>{taskNames.get(approval.taskId) ?? approval.taskId}</strong>
-            <span>{approval.reason}</span>
-          </div>
-          <code>{approval.action}</code>
-          <span className="status">{approvalStatusLabel(approval.status)}</span>
-          {approval.status === "pending" ? (
-            <div className="actions">
-              <button className="iconText" disabled={approve.isPending} onClick={() => approve.mutate(approval.id)}>
-                <Play size={15} />
-                Approve
-              </button>
-              <button className="iconText danger" disabled={reject.isPending} onClick={() => reject.mutate(approval.id)}>
-                <X size={15} />
-                Reject
-              </button>
+    <section className="railPanel">
+      <div className="sectionHead">
+        <span>审批</span>
+        <CircleAlert size={16} />
+      </div>
+      <div className="approvalList">
+        {approvals.map((approval) => (
+          <article className="approvalItem" key={approval.id} data-state={approval.status}>
+            <div>
+              <strong>{taskNames.get(approval.taskId) ?? approval.taskId}</strong>
+              <span>{approval.reason}</span>
             </div>
-          ) : (
-            <time>{approval.decidedAt ? new Date(approval.decidedAt).toLocaleString() : new Date(approval.updatedAt).toLocaleString()}</time>
-          )}
-        </div>
-      ))}
-    </div>
+            <code>{approval.action}</code>
+            {approval.status === "pending" ? (
+              <div className="approvalActions">
+                <button className="iconButton approve" type="button" aria-label="Approve" disabled={approve.isPending} onClick={() => approve.mutate(approval.id)}>
+                  <Check size={15} />
+                </button>
+                <button className="iconButton reject" type="button" aria-label="Reject" disabled={reject.isPending} onClick={() => reject.mutate(approval.id)}>
+                  <X size={15} />
+                </button>
+              </div>
+            ) : (
+              <span className="statusPill">{approvalStatusLabel(approval.status)}</span>
+            )}
+          </article>
+        ))}
+        {approvals.length === 0 ? <p className="emptyState">当前没有等待处理的审批。</p> : null}
+      </div>
+    </section>
   );
 }
 
-function TaskTable({ recovery }: { recovery: RecoveryState | undefined }) {
-  const qc = useQueryClient();
-  const claim = useMutation({ mutationFn: (taskId: string) => trpc.tasks.claim.mutate({ taskId, claimedBy: "operator" }), onSuccess: () => qc.invalidateQueries({ queryKey: ["recovery"] }) });
-  const followUp = useMutation({
-    mutationFn: (task: GeekTask) =>
-      trpc.tasks.followUp.mutate({
-        taskId: task.id,
-        claimedBy: "operator",
-        prompt: `Continue the quest from: ${task.prompt}`,
-        command: task.command,
-        launch: false
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["recovery"] })
-  });
-  const interrupt = useMutation({ mutationFn: (taskId: string) => trpc.tasks.interrupt.mutate({ taskId }), onSuccess: () => qc.invalidateQueries({ queryKey: ["recovery"] }) });
-  const terminate = useMutation({ mutationFn: (taskId: string) => trpc.tasks.terminate.mutate({ taskId }), onSuccess: () => qc.invalidateQueries({ queryKey: ["recovery"] }) });
+function RepoScope({ repos }: { repos: Ultrawork[] }) {
   return (
-    <div className="taskTable">
-      <div className="taskHead">
-        <span>Quest</span>
-        <span>Charge</span>
-        <span>Decree</span>
-        <span>State</span>
-        <span>Races</span>
-        <span>Actions</span>
+    <section className="railPanel">
+      <div className="sectionHead">
+        <span>当前范围</span>
+        <FolderGit2 size={16} />
       </div>
-      {(recovery?.tasks ?? []).map((task) => {
-        const linked = recovery?.taskUltraworks.filter((link) => link.taskId === task.id).length ?? 0;
-        return (
-          <div className="taskRow" key={task.id}>
-            <div data-label="Quest">
-              <strong>{task.title}</strong>
-              <small>{task.cwd}</small>
-            </div>
-            <code data-label="Charge">{task.prompt}</code>
-            <code data-label="Decree">{task.command.join(" ")}</code>
-            <span className="status" data-label="State">{questStateLabel(task.status)}</span>
-            <span data-label="Races">{linked}</span>
-            <div className="actions" data-label="Actions">
-              <button className="iconOnly" aria-label="Claim quest" onClick={() => claim.mutate(task.id)}>
-                <UserCheck size={15} />
-              </button>
-              <button className="iconOnly" aria-label="Halt quest" onClick={() => interrupt.mutate(task.id)}>
-                <Pause size={15} />
-              </button>
-              <button className="iconOnly" aria-label="End quest" onClick={() => terminate.mutate(task.id)}>
-                <Octagon size={15} />
-              </button>
-              <button className="iconOnly" aria-label="Draft follow-up quest" onClick={() => followUp.mutate(task)}>
-                <GitBranchPlus size={15} />
-              </button>
-            </div>
-          </div>
-        );
-      })}
-      {(recovery?.tasks ?? []).length === 0 ? <p className="emptyState">No quests have been launched in this world.</p> : null}
-    </div>
+      <div className="scopeList">
+        {repos.map((repo) => (
+          <article className="scopeItem" key={repo.id}>
+            <strong>{repo.name}</strong>
+            <span>{repo.destinationPath}</span>
+            <small>{repo.headSha?.slice(0, 10) ?? "no head"}</small>
+          </article>
+        ))}
+        {repos.length === 0 ? <p className="emptyState">创建工作区后会显示仓库范围。</p> : null}
+      </div>
+    </section>
   );
 }
 
 function EventStream({ events }: { events: TaskEvent[] }) {
   return (
-    <div className="events">
-      {events.map((event) => (
-        <div className="event" key={event.id}>
-          <span>{dispatchTypeLabel(event.type)}</span>
-          <code>{event.message.trim()}</code>
-        </div>
-      ))}
-      {events.length === 0 ? <p className="emptyState">Bond activity will appear here as roles run.</p> : null}
-    </div>
+    <section className="railPanel">
+      <div className="sectionHead">
+        <span>事件流</span>
+        <Activity size={16} />
+      </div>
+      <div className="eventList">
+        {events.map((event) => (
+          <article className="eventItem" key={event.id}>
+            <span>{eventTypeLabel(event.type)}</span>
+            <code>{event.message.trim()}</code>
+          </article>
+        ))}
+        {events.length === 0 ? <p className="emptyState">代理启动后会在这里显示实时事件。</p> : null}
+      </div>
+    </section>
   );
 }
 
-function TakeoverList({ recovery }: { recovery: RecoveryState | undefined }) {
-  const taskNames = new Map((recovery?.tasks ?? []).map((task) => [task.id, task.title]));
-  return (
-    <div className="takeovers">
-      {(recovery?.takeoverEvents ?? []).map((event) => (
-        <div className="takeover" key={event.id}>
-          <strong data-label="Action">{claimActionLabel(event.action)}</strong>
-          <span data-label="Claimed by">{event.claimedBy}</span>
-          <span data-label="Quest">{taskNames.get(event.taskId) ?? event.taskId}</span>
-          <time data-label="When">{new Date(event.createdAt).toLocaleString()}</time>
-          <code data-label="Note">{event.note ?? ""}</code>
-        </div>
-      ))}
-      {(recovery?.takeoverEvents ?? []).length === 0 ? <p className="emptyState">No operator claims recorded yet.</p> : null}
-    </div>
-  );
-}
-
-type GlossaryTerm = {
-  term: string;
-  translation: string;
-  concept: string;
-  meaning: string;
-  reason: string;
-  asset?: string;
-};
-
-const glossaryTerms: GlossaryTerm[] = [
-  {
-    term: "world",
-    translation: "世界 / 冒险世界",
-    concept: "awesome",
-    meaning: "顶层本地工作空间，也是所有任务、日志和运行状态的边界。",
-    reason: "awesome 是整张世界地图，所有种族、角色任务、日志和恢复状态都发生在这个边界内。",
-    asset: "/world-map.png"
-  },
-  {
-    term: "race",
-    translation: "种族",
-    concept: "ultrawork",
-    meaning: "从本地 git 仓库派生出的工作单元，落在 world 的 ultraworks 目录。",
-    reason: "ultrawork 是世界里的种族。每个种族保留自己的 repo 血统、代码边界和当前进度。",
-    asset: "/race-sigil.png"
-  },
-  {
-    term: "role",
-    translation: "角色",
-    concept: "geek / agent role",
-    meaning: "由某个种族启动的 agent 执行身份，可以偏侦察、构建、修复、审查或批量推进。",
-    reason: "同一个种族可以启动不同角色；角色描述执行风格，底层仍由 geek task/runtime 承载。",
-    asset: "/role-operator.png"
-  },
-  {
-    term: "bond",
-    translation: "羁绊 / 编排",
-    concept: "orchestration",
-    meaning: "多个种族之间的协作关系，以及任务如何跨 ultrawork 组合、追踪和恢复。",
-    reason: "羁绊表达种族之间的编排关系，比旧的队伍/封地比喻更贴近多 agent 协作。",
-    asset: "/bond-network.png"
-  },
-  {
-    term: "quest",
-    translation: "任务 / 远征",
-    concept: "geek task",
-    meaning: "一次角色执行任务，先持久化，再由 runtime 启动或恢复状态。",
-    reason: "角色接到目标后出发，过程可能进行中、暂停、失败，也可能完成后写入战报。"
-  },
-  {
-    term: "scroll",
-    translation: "魔法卷轴 / 任务卷轴",
-    concept: "task draft",
-    meaning: "承载标题、指令正文、命令 JSON 和关联 race bond 的任务指令。",
-    reason: "命令像被写进卷轴的咒语，派发后会召唤一次可记录、可恢复的 quest。"
-  },
-  {
-    term: "battle log",
-    translation: "战报 / 冒险日志",
-    concept: "task event",
-    meaning: "任务事件流，来自 SSE 和 SQLite 中保存的历史记录。",
-    reason: "runtime 把角色执行时的输出、错误、状态变化传回界面，像战斗日志。"
-  },
-  {
-    term: "guild master",
-    translation: "公会会长 / 操作者",
-    concept: "takeover",
-    meaning: "操作者对任务的认领、暂停、终止或追加后续任务。",
-    reason: "操作者像公会会长，可以接管角色任务，决定继续、暂停或终止。"
-  },
-  {
-    term: "princess",
-    translation: "公主 / 核心目标",
-    concept: "user goal",
-    meaning: "用户真正想救出来的结果，比如完成修复、跑通任务或恢复状态。",
-    reason: "它提醒界面和 agent 不要沉迷支线，要围绕最终目标推进。"
-  }
-];
-
-const usageNotes = [
-  "先创建或选择 world，它就是这局冒险的地图边界，浏览器的本地操作都会经 gateway 执行。",
-  "把本地 git repo 加入 world 时，可以把它理解为加入一个 race；当前策略是 clone，而不是复制普通目录。",
-  "每个 race 可以启动不同 role；选择多个 race 时形成 bond，也就是一次任务的编排范围。",
-  "派发 scroll 会创建 quest；命令必须写成 JSON 数组，例如 [\"node\", \"-e\", \"console.log(process.cwd())\"]。"
-] as const;
-
-function CodexModal({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  return (
-    <div className="codexOverlay" role="presentation" onMouseDown={onClose}>
-      <section className="codexModal" role="dialog" aria-modal="true" aria-labelledby="codex-title" onMouseDown={(event) => event.stopPropagation()}>
-        <header className="codexHeader">
-          <div>
-            <span className="eyebrow">adventurer codex</span>
-            <h2 id="codex-title">Caesar Geek Bestiary</h2>
-          </div>
-          <button className="iconOnly" type="button" aria-label="Close codex" onClick={onClose}>
-            <X size={16} />
-          </button>
-        </header>
-
-        <div className="codexBody">
-          <figure className="codexPortrait">
-            <img src="/caesar-geek-icon.png" alt="Caesar Geek avatar" />
-            <figcaption>
-              <strong>Caesar Geek</strong>
-              <span>local-first adventure console for AI work across repositories</span>
-            </figcaption>
-          </figure>
-
-          <div className="codexPages">
-            <section className="codexSection">
-              <div className="panelTitle">
-                <BookOpen size={17} />
-                <h3>Terms</h3>
-              </div>
-              <div className="codexTerms">
-                {glossaryTerms.map((entry) => (
-                  <div className="codexTerm" key={entry.term}>
-                    {entry.asset ? <img className="codexTermAsset" src={entry.asset} alt="" loading="lazy" /> : null}
-                    <div className="codexTermHead">
-                      <strong>{entry.term}</strong>
-                      <span>{entry.translation}</span>
-                    </div>
-                    <span>{entry.concept}</span>
-                    <p>{entry.meaning}</p>
-                    <p className="codexReason">{entry.reason}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="codexSection">
-              <div className="panelTitle">
-                <ShieldAlert size={17} />
-                <h3>How It Works</h3>
-              </div>
-              <ol className="codexNotes">
-                {usageNotes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ol>
-            </section>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function worldGateLabel(state: string): string {
+function issueStateLabel(state: string): string {
   const labels: Record<string, string> = {
-    available: "open world",
-    missing: "lost world",
-    corrupt: "broken world"
+    available: "可用",
+    missing: "缺失",
+    corrupt: "损坏"
   };
   return labels[state] ?? state;
 }
 
-function questStateLabel(state: string): string {
+function taskStateLabel(state: string): string {
   const labels: Record<string, string> = {
-    created: "drafted",
-    queued: "in queue",
-    running: "on quest",
-    claimed: "claimed",
-    interrupted: "halted",
-    terminated: "ended",
-    rejected: "rejected",
-    exited: "sealed",
-    failed: "failed",
-    unknown: "fogged",
-    orphaned: "stray"
+    created: "已创建",
+    queued: "排队中",
+    running: "运行中",
+    claimed: "已接管",
+    interrupted: "已暂停",
+    terminated: "已终止",
+    rejected: "已拒绝",
+    exited: "已完成",
+    failed: "失败",
+    unknown: "未知",
+    orphaned: "孤立"
   };
   return labels[state] ?? state;
 }
 
 function approvalStatusLabel(state: string): string {
   const labels: Record<string, string> = {
-    pending: "pending",
-    approved: "approved",
-    rejected: "rejected",
-    expired: "expired",
-    bypassed: "bypassed"
+    pending: "待审批",
+    approved: "已通过",
+    rejected: "已拒绝",
+    expired: "已过期",
+    bypassed: "已跳过"
   };
   return labels[state] ?? state;
 }
 
-function dispatchTypeLabel(type: string): string {
+function eventTypeLabel(type: string): string {
   const labels: Record<string, string> = {
-    status: "bond",
-    log: "trace",
-    error: "alarm",
-    policy: "guard",
-    takeover: "claim"
+    status: "状态",
+    log: "日志",
+    error: "错误",
+    policy: "策略",
+    takeover: "接管"
   };
   return labels[type] ?? type;
-}
-
-function claimActionLabel(action: string): string {
-  const labels: Record<string, string> = {
-    claim: "claimed",
-    interrupt: "halted",
-    terminate: "ended",
-    follow_up: "new quest"
-  };
-  return labels[action] ?? action;
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
