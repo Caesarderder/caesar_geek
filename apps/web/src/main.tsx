@@ -8,6 +8,7 @@ import {
   Clock3,
   FolderGit2,
   GitBranchPlus,
+  GitFork,
   MessageSquarePlus,
   Octagon,
   PanelLeft,
@@ -112,11 +113,11 @@ function WorkspaceConsole() {
   const pendingApprovals = recovery.data?.approvals.filter((approval) => approval.status === "pending").length ?? 0;
   const runningTasks = tasks.filter((task) => ["queued", "running"].includes(task.status)).length;
   const completedTasks = tasks.filter((task) => ["exited", "terminated"].includes(task.status)).length;
-  const activeIssue = recovery.data?.awesome.name ?? "选择或创建一个工作区";
+  const activeIssue = recovery.data?.awesome.name ?? "选择或创建一个 Awesome";
 
   return (
     <main className="appShell">
-      <aside className="sideRail" aria-label="Workspaces and repositories">
+      <aside className="sideRail" aria-label="Awesomes and Ultraworks">
         <Brand />
         <SidebarTabs
           issues={awesomes.data ?? []}
@@ -130,14 +131,15 @@ function WorkspaceConsole() {
         />
       </aside>
 
-      <section className="chatPane" aria-label="Agent workspace">
+      <section className="chatPane" aria-label="Caesar Geek console">
         <header className="chatHeader">
           <div className="chatTitle">
             <span className="sectionKicker">
               <Sparkles size={14} />
-              Agent workspace
+              Caesar control plane
             </span>
             <h1>{activeIssue}</h1>
+            <p>Awesome world · Ultrawork race · Geek role · Bond collaboration</p>
           </div>
           <div className="headerActions">
             <Metric label="运行中" value={runningTasks} tone="blue" />
@@ -150,7 +152,7 @@ function WorkspaceConsole() {
         </header>
 
         <TaskFeed recovery={recovery.data} />
-        <section className="chatComposerDock" aria-label="Start an agent task">
+        <section className="chatComposerDock" aria-label="Start a Geek task">
           <AgentComposer ultraworks={recovery.data?.ultraworks ?? []} />
         </section>
       </section>
@@ -164,7 +166,7 @@ function Brand() {
       <img src="/caesar-geek-icon.png" alt="" />
       <div>
         <strong>Caesar Geek</strong>
-        <span>Local AI workbench</span>
+        <span>Local-first AI control plane</span>
       </div>
       <button className="iconButton" type="button" aria-label="Toggle sidebar">
         <PanelLeft size={17} />
@@ -205,7 +207,7 @@ function SidebarTabs({
 }) {
   const [activeTab, setActiveTab] = useState<SidebarTab>("workspaces");
   const tabs: Array<{ id: SidebarTab; label: string; icon: React.ReactNode }> = [
-    { id: "workspaces", label: "项目", icon: <FolderGit2 size={17} /> },
+    { id: "workspaces", label: "Awesome", icon: <FolderGit2 size={17} /> },
     { id: "controls", label: "执行", icon: <ShieldCheck size={17} /> },
     { id: "context", label: "上下文", icon: <Activity size={17} /> }
   ];
@@ -279,8 +281,8 @@ function IssuePanel({
     <div className="sideStack">
       <section className="sideSection">
         <div className="sectionHead">
-          <span>工作区</span>
-          <button className="iconButton" type="button" aria-label="Refresh workspaces" onClick={refreshIssues}>
+          <span>Awesome worlds</span>
+          <button className="iconButton" type="button" aria-label="Refresh Awesomes" onClick={refreshIssues}>
             <RefreshCcw size={15} />
           </button>
         </div>
@@ -291,13 +293,13 @@ function IssuePanel({
               <small data-state={issue.availability}>{issueStateLabel(issue.availability)}</small>
             </button>
           ))}
-          {issues.length === 0 ? <p className="emptyState">还没有工作区。先从本地仓库创建一个。</p> : null}
+          {issues.length === 0 ? <p className="emptyState">还没有 Awesome。先选择本地 repo，为它们创建一个 world。</p> : null}
         </div>
       </section>
 
       <section className="sideSection">
         <div className="sectionHead">
-          <span>新建工作区</span>
+          <span>新建 Awesome</span>
           <button className="iconButton" type="button" aria-label="Scan repositories" onClick={refreshRepos}>
             <RefreshCcw size={15} />
           </button>
@@ -328,7 +330,7 @@ function IssuePanel({
         </div>
         <button className="primaryButton" type="button" disabled={selectedRepoPaths.length === 0 || create.isPending} onClick={() => create.mutate()}>
           <MessageSquarePlus size={16} />
-          创建并进入
+          创建 Awesome
         </button>
       </section>
     </div>
@@ -337,8 +339,8 @@ function IssuePanel({
 
 function AgentComposer({ ultraworks }: { ultraworks: Ultrawork[] }) {
   const qc = useQueryClient();
-  const [title, setTitle] = useState("Audit selected scope");
-  const [prompt, setPrompt] = useState("Goal: inspect the selected scope and report current status.\nConstraints: avoid destructive commands.\nReview point: stop before applying changes.");
+  const [title, setTitle] = useState("Geek audit Awesome");
+  const [prompt, setPrompt] = useState("Goal: inspect this Awesome or Ultrawork and report current status.\nConstraints: avoid destructive commands and credential exposure.\nReview point: stop before applying changes.");
   const [scope, setScope] = useState("all");
   const create = useMutation({
     mutationFn: () => {
@@ -370,14 +372,32 @@ function AgentComposer({ ultraworks }: { ultraworks: Ultrawork[] }) {
         <input value={title} onChange={(event) => setTitle(event.target.value)} />
       </label>
       <label className="field">
-        <span>给代理的上下文</span>
+        <span>给 Geek 的目标与约束</span>
         <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={5} />
       </label>
+      <div className="conceptStrip" aria-label="Caesar Geek concepts">
+        <span>
+          <Sparkles size={14} />
+          Awesome world
+        </span>
+        <span>
+          <FolderGit2 size={14} />
+          Ultrawork race
+        </span>
+        <span>
+          <Bot size={14} />
+          Geek role
+        </span>
+        <span>
+          <GitFork size={14} />
+          Bond collaboration
+        </span>
+      </div>
       <div className="composerFooter">
         <label className="selectField">
           <FolderGit2 size={15} />
           <select value={scope} onChange={(event) => setScope(event.target.value)}>
-            <option value="all">全部仓库</option>
+            <option value="all">整个 Awesome</option>
             {ultraworks.map((repo) => (
               <option value={repo.id} key={repo.id}>
                 {repo.name}
@@ -387,7 +407,7 @@ function AgentComposer({ ultraworks }: { ultraworks: Ultrawork[] }) {
         </label>
         <button className="primaryButton" type="submit" disabled={create.isPending || ultraworks.length === 0}>
           <Send size={16} />
-          启动代理
+          启动 Geek
         </button>
       </div>
       {create.data && !create.data.policy.allowed ? (
@@ -419,14 +439,14 @@ function TaskFeed({ recovery }: { recovery: RecoveryState | undefined }) {
   const tasks = recovery?.tasks ?? [];
 
   return (
-    <section className="taskFeed" aria-label="Agent tasks">
+    <section className="taskFeed" aria-label="Geek tasks">
       <div className="feedHead">
         <div>
           <span className="sectionKicker">
             <Activity size={14} />
-            Conversation timeline
+            Geek timeline
           </span>
-          <h2>代理任务</h2>
+          <h2>Geek 任务</h2>
         </div>
         <span>{tasks.length} 个任务</span>
       </div>
@@ -447,7 +467,7 @@ function TaskFeed({ recovery }: { recovery: RecoveryState | undefined }) {
                 <div className="taskMeta">
                   <span>
                     <FolderGit2 size={14} />
-                    {linked} scope
+                    {linked} 个 Ultrawork
                   </span>
                   <span>
                     <Clock3 size={14} />
@@ -477,7 +497,7 @@ function TaskFeed({ recovery }: { recovery: RecoveryState | undefined }) {
             </article>
           );
         })}
-        {tasks.length === 0 ? <p className="emptyState">还没有任务。写下目标并启动第一个代理。</p> : null}
+        {tasks.length === 0 ? <p className="emptyState">还没有 Geek 任务。写下目标，从 Awesome 或 Ultrawork 启动第一个 Geek。</p> : null}
       </div>
     </section>
   );
@@ -487,7 +507,7 @@ function StatusPanel({ runningTasks, completedTasks, events, repoCount }: { runn
   return (
     <section className="railPanel">
       <div className="sectionHead">
-        <span>运行概览</span>
+        <span>Geek 概览</span>
         <ShieldCheck size={16} />
       </div>
       <div className="statusGrid">
@@ -512,12 +532,12 @@ function DeployPanel({ hasActiveWorkspace }: { hasActiveWorkspace: boolean }) {
         <span>更新/部署</span>
         <Rocket size={16} />
       </div>
-      <p>同步当前分支到最新提交，安装依赖并构建；服务器可通过 CAESAR_DEPLOY_COMMAND 接入重启或云端发布。</p>
+      <p>创建一个受控更新/部署任务：同步当前分支、安装依赖并构建；服务器可通过 CAESAR_DEPLOY_COMMAND 接入重启或云端发布。</p>
       <button className="primaryButton deployButton" type="button" disabled={!hasActiveWorkspace || deploy.isPending} onClick={() => deploy.mutate()}>
         <RefreshCcw size={16} />
-        {deploy.isPending ? "正在创建任务" : "自动更新部署"}
+        {deploy.isPending ? "正在创建任务" : "创建更新/部署任务"}
       </button>
-      {!hasActiveWorkspace ? <small>先选择或创建一个工作区，用于记录部署日志。</small> : null}
+      {!hasActiveWorkspace ? <small>先选择或创建一个 Awesome，用于记录部署日志。</small> : null}
       {deploy.data ? <small>已创建任务：{taskStateLabel(deploy.data.task.status)}</small> : null}
       {deploy.error ? <small className="dangerText">{deploy.error.message}</small> : null}
     </section>
@@ -575,7 +595,7 @@ function RepoScope({ repos }: { repos: Ultrawork[] }) {
   return (
     <section className="railPanel">
       <div className="sectionHead">
-        <span>当前范围</span>
+        <span>Ultrawork 范围</span>
         <FolderGit2 size={16} />
       </div>
       <div className="scopeList">
@@ -586,7 +606,7 @@ function RepoScope({ repos }: { repos: Ultrawork[] }) {
             <small>{repo.headSha?.slice(0, 10) ?? "no head"}</small>
           </article>
         ))}
-        {repos.length === 0 ? <p className="emptyState">创建工作区后会显示仓库范围。</p> : null}
+        {repos.length === 0 ? <p className="emptyState">创建 Awesome 后会显示其中的 Ultrawork 范围。</p> : null}
       </div>
     </section>
   );
@@ -606,7 +626,7 @@ function EventStream({ events }: { events: TaskEvent[] }) {
             <code>{event.message.trim()}</code>
           </article>
         ))}
-        {events.length === 0 ? <p className="emptyState">代理启动后会在这里显示实时事件。</p> : null}
+        {events.length === 0 ? <p className="emptyState">Geek 启动后会在这里显示实时事件。</p> : null}
       </div>
     </section>
   );
