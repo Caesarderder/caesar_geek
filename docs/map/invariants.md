@@ -4,13 +4,15 @@ km_type: invariant
 domain: cross-domain
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-29
+last_verified: 2026-05-30
 source_of_truth:
   - .omx/specs/deep-interview-local-ai-workspace-gateway.md
   - .omx/plans/local-ai-workspace-gateway-plan.md
   - packages/shared/src/index.ts
   - packages/workspace/src/index.ts
   - packages/agent-runtime/src/index.ts
+  - deploy/sync-local-and-deploy.sh
+  - docs/runbooks/cloud-deployment.md
   - docs/references/architecture/local-agent-core-rules.md
 validated_by:
   - manual-code-read
@@ -48,6 +50,7 @@ related:
 - 持久化恢复以 SQLite/registry 中的记录为事实来源；重启后的进程状态只能表达为 last-known、unknown、exited 或 orphaned。
 - 高风险动作必须在 gateway/runtime 边界建模，不能只在 UI 文案里提示。
 - `docs/` 是长期事实来源；`.omx` 是计划和上下文来源，不能替代知识地图。
+- 修改线上网页、后端服务、Nginx/systemd 配置或部署脚本后，必须按 [Cloud Deployment Runbook](../runbooks/cloud-deployment.md) 重新部署到云服务器；纯文档修改且不影响线上运行时除外。
 
 ## 验证
 

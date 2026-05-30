@@ -4,14 +4,17 @@ km_type: runbook
 domain: workflow
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-29
+last_verified: 2026-05-30
 source_of_truth:
   - deploy/deploy-to-47.93.141.241.sh
+  - deploy/sync-local-and-deploy.sh
   - deploy/nginx.caesar-geek.conf
   - deploy/caesar-geek.service
   - user-deployment-2026-05-29
 validated_by:
   - manual-deployment
+  - bash -n deploy/sync-local-and-deploy.sh
+  - deploy/sync-local-and-deploy.sh --help
   - curl-public-http-check
   - systemctl-status-check
 tags:
@@ -49,9 +52,10 @@ http://47.93.141.241
 - 当前根路径 `/` 代理到 `caesar_gateway` 的 Gateway UI，用于显示 Mac mini World 连接状态。
 - Nginx 反代路径：`/trpc` 与 `/events` -> `http://127.0.0.1:4387`。
 - Nginx 反代路径：`/api`、`/world`、`/agent`、`/client` -> `http://127.0.0.1:8787`。
-- 后续同步方式：Git 部署，不使用 `rsync`。
+- 发布方式有两条：提交并推送后的 Git 部署，或把本地未提交修改直接上传的 `rsync` 直传部署。
+- 只要修改影响线上网页、后端服务、Nginx/systemd 配置或部署脚本，就必须重新部署到云服务器；仅修改纯文档且不影响线上运行时除外。
 
-## 发布流程
+## 发布流程：Git 部署
 
 先把本地变更提交并推送到远端：
 
@@ -77,6 +81,33 @@ SERVER_USER=root REPO_URL=https://github.com/Caesarderder/caesar_geek.git ./depl
 5. 安装 `deploy/caesar-geek.service` 到 systemd。
 6. 安装 `deploy/nginx.caesar-geek.conf` 到 Nginx。
 7. 重启 `caesar-geek` 服务并 reload Nginx。
+
+## 发布流程：本地直传部署
+
+当需要把本地未提交修改直接同步到云服务器时，从仓库根目录执行：
+
+```bash
+SERVER_USER=root ./deploy/sync-local-and-deploy.sh
+```
+
+该脚本行为：
+
+1. 本地执行 `pnpm install --frozen-lockfile` 和 `pnpm build` 作为预检。
+2. 服务器安装或确认 `curl`、`rsync`、`nginx`、Node.js、pnpm。
+3. 用 `rsync --delete` 上传当前工作区到 `/opt/caesar/caesar_geek`，排除 `.git/`、`.env*`、`node_modules/`、`dist/`、`coverage/`、日志和本地缓存。
+4. 服务器执行 `pnpm install --frozen-lockfile` 和 `pnpm build`。
+5. 安装 `deploy/caesar-geek.service` 到 systemd。
+6. 安装 `deploy/nginx.caesar-geek.conf` 到 Nginx。
+7. 重启 `caesar-geek` 服务并 reload Nginx。
+
+常用覆盖：
+
+```bash
+SERVER_HOST=47.93.141.241 SERVER_USER=root SERVER_PORT=22 ./deploy/sync-local-and-deploy.sh
+SKIP_LOCAL_BUILD=1 ./deploy/sync-local-and-deploy.sh
+```
+
+直传部署会覆盖服务器目标目录中不在本地工作区内的文件；不要把服务器专属 secrets 放在 `/opt/caesar/caesar_geek` 内，运行数据和敏感配置应放在 `/var/lib/caesar-geek` 或系统配置位置。
 
 ## Basic Auth
 

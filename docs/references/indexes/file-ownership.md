@@ -4,10 +4,11 @@ km_type: reference
 domain: code
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-27
+last_verified: 2026-05-30
 source_of_truth:
   - apps
   - packages
+  - deploy
   - package.json
   - docs/references/architecture/cloud-agent-codex-session-concepts.md
 validated_by:
@@ -48,6 +49,10 @@ related:
 | `CODE:packages/workspace/src/index.ts` | workspace | awesome layout、path scope、git clone ultrawork | manual-read |
 | `CODE:packages/agent-runtime/src/index.ts` | runtime | GeekRuntime、spawn、events、takeover、shutdown；Cloud path 中的 CodexSessionManager/tmux session scope | manual-read |
 | `CODE:packages/cloud-agent/src/index.ts` | cloud-agent | outbound World runtime、Cloud Protocol parser、Issue/repo/worktree/session handler | manual-read |
+| `CODE:deploy/deploy-to-47.93.141.241.sh` | ops | 从 Git 部署已推送代码到 ECS | manual-read |
+| `CODE:deploy/sync-local-and-deploy.sh` | ops | 通过 SSH/rsync 上传本地未提交工作区并远端构建重启 | bash-n |
+| `CODE:deploy/nginx.caesar-geek.conf` | ops | ECS Nginx 入口、Basic Auth、静态目录和反代规则 | manual-read |
+| `CODE:deploy/caesar-geek.service` | ops | systemd 服务定义、后端监听和数据目录环境变量 | manual-read |
 | `CODE:.omx/specs/deep-interview-local-ai-workspace-gateway.md` | product | 需求规格和范围 | manual-read |
 | `CODE:.omx/plans/local-ai-workspace-gateway-plan.md` | product | 实施规划和验收标准 | manual-read |
 | `CODE:../.omx/specs/deep-interview-cloud-agent-codex-session-mvp.md` | product | Cloud Agent Codex Session MVP ontology 和验收标准 | manual-read |

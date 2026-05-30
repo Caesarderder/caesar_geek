@@ -118,9 +118,13 @@ function WorkspaceConsole() {
     <main className="appShell">
       <aside className="sideRail" aria-label="Workspaces and repositories">
         <Brand />
-        <IssuePanel
+        <SidebarTabs
           issues={awesomes.data ?? []}
           repos={repoScan.data ?? []}
+          recovery={recovery.data}
+          runningTasks={runningTasks}
+          completedTasks={completedTasks}
+          events={events}
           refreshIssues={() => void awesomes.refetch()}
           refreshRepos={() => void repoScan.refetch()}
         />
@@ -145,28 +149,11 @@ function WorkspaceConsole() {
           </div>
         </header>
 
-        <section className="heroPrompt" aria-label="Start an agent task">
-          <div>
-            <span className="sectionKicker">
-              <Bot size={14} />
-              和本地 AI 代理协作
-            </span>
-            <h2>描述目标，选择范围，剩下的交给可监督的任务流。</h2>
-            <p>界面只保留三件事：你要什么、代理正在做什么、哪里需要你确认。</p>
-          </div>
+        <TaskFeed recovery={recovery.data} />
+        <section className="chatComposerDock" aria-label="Start an agent task">
           <AgentComposer ultraworks={recovery.data?.ultraworks ?? []} />
         </section>
-
-        <TaskFeed recovery={recovery.data} />
       </section>
-
-      <aside className="contextRail" aria-label="Execution context">
-        <StatusPanel runningTasks={runningTasks} completedTasks={completedTasks} events={events.length} repoCount={recovery.data?.ultraworks.length ?? 0} />
-        <DeployPanel hasActiveWorkspace={Boolean(recovery.data)} />
-        <ApprovalGate recovery={recovery.data} />
-        <RepoScope repos={recovery.data?.ultraworks ?? []} />
-        <EventStream events={events} />
-      </aside>
     </main>
   );
 }
@@ -192,6 +179,67 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: "b
       <strong>{value}</strong>
       {label}
     </span>
+  );
+}
+
+type SidebarTab = "workspaces" | "controls" | "context";
+
+function SidebarTabs({
+  issues,
+  repos,
+  recovery,
+  runningTasks,
+  completedTasks,
+  events,
+  refreshIssues,
+  refreshRepos
+}: {
+  issues: RegistryRecord[];
+  repos: RepoCandidate[];
+  recovery: RecoveryState | undefined;
+  runningTasks: number;
+  completedTasks: number;
+  events: TaskEvent[];
+  refreshIssues: () => void;
+  refreshRepos: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<SidebarTab>("workspaces");
+  const tabs: Array<{ id: SidebarTab; label: string; icon: React.ReactNode }> = [
+    { id: "workspaces", label: "项目", icon: <FolderGit2 size={17} /> },
+    { id: "controls", label: "执行", icon: <ShieldCheck size={17} /> },
+    { id: "context", label: "上下文", icon: <Activity size={17} /> }
+  ];
+
+  return (
+    <div className="sidebarTabs">
+      <div className="tabList" role="tablist" aria-label="左侧栏目">
+        {tabs.map((tab) => (
+          <button key={tab.id} className="tabButton" type="button" role="tab" aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id)}>
+            {tab.icon}
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="tabPanel" role="tabpanel">
+        {activeTab === "workspaces" ? (
+          <IssuePanel issues={issues} repos={repos} refreshIssues={refreshIssues} refreshRepos={refreshRepos} />
+        ) : null}
+        {activeTab === "controls" ? (
+          <div className="sideStack">
+            <StatusPanel runningTasks={runningTasks} completedTasks={completedTasks} events={events.length} repoCount={recovery?.ultraworks.length ?? 0} />
+            <ApprovalGate recovery={recovery} />
+            <DeployPanel hasActiveWorkspace={Boolean(recovery)} />
+          </div>
+        ) : null}
+        {activeTab === "context" ? (
+          <div className="sideStack">
+            <RepoScope repos={recovery?.ultraworks ?? []} />
+            <EventStream events={events} />
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

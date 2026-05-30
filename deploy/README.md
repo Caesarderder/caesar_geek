@@ -40,3 +40,18 @@ Deploy another branch:
 ```bash
 DEPLOY_REF=main SERVER_USER=root ./deploy/deploy-to-47.93.141.241.sh
 ```
+
+Deploy local uncommitted changes directly with rsync:
+
+```bash
+SERVER_USER=root ./deploy/sync-local-and-deploy.sh
+```
+
+This path does not require committing or pushing first. It runs a local install/build preflight, uploads the current working tree to `/opt/caesar/caesar_geek` with `rsync`, then installs dependencies, builds, restarts `caesar-geek`, and reloads Nginx on the server.
+
+Useful overrides:
+
+```bash
+SERVER_HOST=47.93.141.241 SERVER_USER=root SERVER_PORT=22 ./deploy/sync-local-and-deploy.sh
+SKIP_LOCAL_BUILD=1 ./deploy/sync-local-and-deploy.sh
+```

@@ -4,7 +4,7 @@ km_type: reference
 domain: architecture
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-29
+last_verified: 2026-05-30
 source_of_truth:
   - README.md
   - package.json
@@ -19,6 +19,7 @@ source_of_truth:
   - packages/agent-runtime/src/index.ts
   - packages/cloud-agent/src/index.ts
   - deploy/deploy-to-47.93.141.241.sh
+  - deploy/sync-local-and-deploy.sh
   - deploy/nginx.caesar-geek.conf
   - deploy/caesar-geek.service
 validated_by:
@@ -59,7 +60,8 @@ related:
 - 2026-05-29 的目标边界更新：公网 Gateway 计划拆到 `../caesar_gateway`；`caesar_geek` 后续聚焦 Mac mini 本地 Agent/runtime、repo registry、git worktree 和持续 Codex Session 管理。
 - 根目录 `.omx` 的 Cloud Agent Codex Session 规划将产品模型明确为 World/Issue/repo/worktree/Agent/session；本地执行面由 `packages/cloud-agent`、`packages/shared`、`packages/workspace` 和 `packages/agent-runtime` 承担。
 - 2026-05-29 的当前运维部署：Caesar Geek Web 控制台已可通过阿里云 ECS 公网 IP `47.93.141.241` 访问；Nginx 对外监听 80，使用 Basic Auth，静态托管 `apps/web/dist`，并将 `/trpc` 与 `/events` 反代到本机 `127.0.0.1:4387`。
-- 后续云端发布工作流使用 Git 部署：服务器首次 clone，后续 `git fetch --prune` + `git reset --hard origin/main`，不再使用 `rsync` 同步本地目录。
+- 云端发布工作流有两条：`deploy/deploy-to-47.93.141.241.sh` 从 Git 部署已推送代码；`deploy/sync-local-and-deploy.sh` 用 `rsync` 上传本地未提交工作区后远端构建并重启服务。
+- 修改线上网页、后端服务、Nginx/systemd 配置或部署脚本后，必须按 KM:runbook.cloud-deployment 重新部署到云服务器；纯文档修改且不影响线上运行时除外。
 
 ## 入口或路径
 
@@ -71,6 +73,7 @@ related:
 - `CODE:packages/agent-runtime/src/index.ts`
 - `CODE:packages/cloud-agent/src/index.ts`
 - `CODE:deploy/deploy-to-47.93.141.241.sh`
+- `CODE:deploy/sync-local-and-deploy.sh`
 - `CODE:deploy/nginx.caesar-geek.conf`
 - `CODE:deploy/caesar-geek.service`
 - `CODE:.omx/specs/deep-interview-local-ai-workspace-gateway.md`

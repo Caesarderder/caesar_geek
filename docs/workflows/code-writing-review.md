@@ -4,10 +4,12 @@ km_type: workflow
 domain: workflow
 status: active
 owner: caesar-maintainers
-last_verified: 2026-05-26
+last_verified: 2026-05-30
 source_of_truth:
   - package.json
   - docs/workflows/impact-map.md
+  - docs/map/invariants.md
+  - docs/runbooks/cloud-deployment.md
 validated_by:
   - manual-docs-review
 tags:
@@ -36,11 +38,13 @@ related:
 2. 优先遵循现有包边界和代码风格。
 3. 修改代码时检查是否影响 schema、术语、领域、文件归属或 wiki。
 4. 按风险运行验证命令。
-5. 如发现重复误判或可复用经验，写入 `docs/memory/`。
+5. 如果修改影响线上网页、后端服务、Nginx/systemd 配置或部署脚本，按 [Cloud Deployment Runbook](../runbooks/cloud-deployment.md) 重新部署到云服务器。
+6. 如发现重复误判或可复用经验，写入 `docs/memory/`。
 
 ## 停止条件
 
 - 代码和必要 docs 已同步。
+- 线上相关修改已重新部署，或明确说明没有部署原因。
 - 验证完成，或明确说明未运行原因。
 
 ## 验证
